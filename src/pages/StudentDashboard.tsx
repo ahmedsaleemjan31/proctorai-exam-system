@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useAppAuth, logout, setUserRole, subscribeToExams } from '../lib/firebase';
 import { GraduationCap, LogOut, Calendar, Clock, Video, RotateCcw, AlertTriangle, Play } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Navigate, Link } from 'react-router-dom';
+import { Navigate, Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
 const WebcamPlayer = ({ stream }: { stream: MediaStream }) => {
@@ -29,6 +29,7 @@ const WebcamPlayer = ({ stream }: { stream: MediaStream }) => {
 
 export default function StudentDashboard() {
   const { user, loading } = useAppAuth();
+  const navigate = useNavigate();
 
   const [exams, setExams] = useState<any[]>([]);
   const [checkingSystem, setCheckingSystem] = useState<{ id: string; status: 'idle' | 'checking' | 'ready' } | null>(null);
@@ -159,7 +160,7 @@ export default function StudentDashboard() {
                   ) : (
                     <motion.div key="ready" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col gap-3">
                       {stream && <WebcamPlayer stream={stream} />}
-                      <motion.button onClick={() => toast.info('Exam interface coming soon!')} className="w-full py-3 bg-green-600 hover:bg-green-500 transition-colors rounded-xl font-medium flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(34,197,94,0.2)]">
+                      <motion.button onClick={() => navigate(`/exam/${exam.id}`)} className="w-full py-3 bg-green-600 hover:bg-green-500 transition-colors rounded-xl font-medium flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(34,197,94,0.2)]">
                         <Play className="w-4 h-4 fill-current" /> Begin Exam
                       </motion.button>
                     </motion.div>

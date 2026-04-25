@@ -1,47 +1,98 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAppAuth, logout, setUserRole, subscribeToExams } from '../lib/firebase';
 import { GraduationCap, LogOut, Calendar, Clock, Video, RotateCcw, AlertTriangle, Play } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Navigate, Link } from 'react-router-dom';
 import { toast } from 'sonner';
 
+const WebcamPlayer = ({ stream }: { stream: MediaStream }) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    if (videoRef.current && stream) {
+      videoRef.current.srcObject = stream;
+    }
+  }, [stream]);
+
+  return (
+    <div className="w-full aspect-video bg-[#050505] rounded-xl overflow-hidden border border-white/10 relative">
+      <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover transform -scale-x-100" />
+      <div className="absolute bottom-2 left-2 flex gap-2">
+         <div className="px-2 py-1 bg-green-500/20 text-green-400 text-xs rounded border border-green-500/20 flex items-center gap-1.5 backdrop-blur-md">
+           <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+           Secure Feed Active
+         </div>
+      </div>
+    </div>
+  );
+};
+
 export default function StudentDashboard() {
   const { user, loading } = useAppAuth();
-  
+
   const [exams, setExams] = useState<any[]>([]);
   const [checkingSystem, setCheckingSystem] = useState<{ id: string; status: 'idle' | 'checking' | 'ready' } | null>(null);
+  const [stream, setStream] = useState<MediaStream | null>(null);
 
   useEffect(() => {
     // Load exams scheduled by Admin straight from database
     const unsubExams = subscribeToExams((fetchedExams) => {
       setExams(fetchedExams.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()));
     });
-    
+
     return () => {
       unsubExams();
     };
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [stream]);
 
   if (loading) return <div></div>;
   if (!user || user.role !== 'student') return <Navigate to="/login" />;
 
   const handleSwitchToAdmin = async () => {
     if (confirm("Developer Mode: Switch your account to Admin?")) {
-       try {
-         await setUserRole(user.uid, user.email, user.name, 'admin');
-         toast.info("Switched to Admin portal");
-       } catch (err: any) {
-         toast.error("Failed to switch role: " + err.message);
-       }
+      try {
+        await setUserRole(user.uid, user.email, user.name, 'admin');
+        toast.info("Switched to Admin portal");
+      } catch (err: any) {
+        toast.error("Failed to switch role: " + err.message);
+      }
     }
   };
 
-  const handleStartSystemCheck = (id: string) => {
+
+
+  const handleStartSystemCheck = async (id: string) => {
     setCheckingSystem({ id, status: 'checking' });
-    setTimeout(() => {
+    
+    // Minimum 1.5s delay to prevent framer-motion AnimatePresence crash from instant state changes
+    const minDelay = new Promise(resolve => setTimeout(resolve, 1500));
+    
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+         throw new Error("Your browser does not support camera access or you are not on HTTPS.");
+      }
+
+      const mediaStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      
+      await minDelay;
+      
+      setStream(mediaStream);
       setCheckingSystem({ id, status: 'ready' });
       toast.success("System & Camera verified!");
-    }, 2500);
+    } catch (err: any) {
+      await minDelay; // IMPORTANT: wait before unmounting even on error
+      
+      setCheckingSystem(null);
+      toast.error("Failed to access camera: " + (err.message || String(err)));
+    }
   };
 
   return (
@@ -54,13 +105,13 @@ export default function StudentDashboard() {
           </Link>
           <div className="flex items-center gap-6">
             <span className="hidden sm:block text-sm text-white/50">{user.email}</span>
-            <button 
-              onClick={handleSwitchToAdmin} 
+            <button
+              onClick={handleSwitchToAdmin}
               className="flex items-center gap-2 text-sm text-white/50 hover:text-indigo-400 transition-colors bg-white/5 px-3 py-1.5 rounded-lg border border-white/10 hover:border-indigo-400/30"
               title="Test Mode: Switch Role"
             >
-               <RotateCcw className="w-4 h-4" />
-               <span className="hidden sm:block text-xs">Switch to Admin</span>
+              <RotateCcw className="w-4 h-4" />
+              <span className="hidden sm:block text-xs">Switch to Admin</span>
             </button>
             <button onClick={logout} className="flex items-center gap-2 text-sm text-white/50 hover:text-red-400 transition-colors bg-white/5 px-3 py-1.5 rounded-lg border border-white/10 hover:border-red-400/30">
               <LogOut className="w-4 h-4" />
@@ -73,55 +124,58 @@ export default function StudentDashboard() {
       <main className="max-w-7xl mx-auto px-6 py-12">
         <h1 className="text-3xl font-display font-bold mb-2">Welcome, {user.name}</h1>
         <p className="text-white/50 mb-10">Access your upcoming assessments and past results.</p>
-        
+
         <h2 className="text-lg font-medium mb-4">Upcoming Exams</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
           {exams.length > 0 ? exams.map((exam) => (
             <motion.div key={exam.id} layout initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-[#0A0A0C] border border-white/10 rounded-2xl p-6 relative overflow-hidden group flex flex-col">
               <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 blur-[50px] rounded-full group-hover:bg-indigo-500/20 transition-all pointer-events-none" />
-              
+
               <div className="flex justify-between items-start mb-6 relative z-10">
-                 <div>
-                   <div className="text-xl font-bold font-display mb-1">{exam.name}</div>
-                   <div className="text-sm text-indigo-300 font-medium">Proctored Term Exam</div>
-                 </div>
+                <div>
+                  <div className="text-xl font-bold font-display mb-1">{exam.name}</div>
+                  <div className="text-sm text-indigo-300 font-medium">Proctored Term Exam</div>
+                </div>
               </div>
 
               <div className="flex flex-col gap-3 mb-8 relative z-10 flex-1">
-                 <div className="flex items-center gap-3 text-sm text-white/70 bg-white/5 p-2 rounded-lg border border-white/5">
-                   <Calendar className="w-4 h-4 text-white/40" /> 
-                   {new Date(exam.date).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' })}
-                 </div>
-                 <div className="flex items-center gap-3 text-sm text-white/70 bg-white/5 p-2 rounded-lg border border-white/5">
-                   <Clock className="w-4 h-4 text-white/40" /> 
-                   {exam.time} (Local Time)
-                 </div>
+                <div className="flex items-center gap-3 text-sm text-white/70 bg-white/5 p-2 rounded-lg border border-white/5">
+                  <Calendar className="w-4 h-4 text-white/40" />
+                  {new Date(exam.date).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' })}
+                </div>
+                <div className="flex items-center gap-3 text-sm text-white/70 bg-white/5 p-2 rounded-lg border border-white/5">
+                  <Clock className="w-4 h-4 text-white/40" />
+                  {exam.time} (Local Time)
+                </div>
               </div>
 
               <AnimatePresence mode="wait">
                 {checkingSystem?.id === exam.id ? (
                   checkingSystem.status === 'checking' ? (
-                     <motion.div key="checking" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="p-3 bg-white/5 rounded-xl border border-white/10 flex items-center justify-center gap-3">
-                        <div className="w-4 h-4 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" />
-                        <span className="text-sm font-medium">Verifying Camera & Audio...</span>
-                     </motion.div>
+                    <motion.div key="checking" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="p-3 bg-white/5 rounded-xl border border-white/10 flex items-center justify-center gap-3">
+                      <div className="w-4 h-4 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" />
+                      <span className="text-sm font-medium">Verifying Camera & Audio...</span>
+                    </motion.div>
                   ) : (
-                     <motion.button key="ready" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="w-full py-3 bg-green-600 hover:bg-green-500 transition-colors rounded-xl font-medium flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(34,197,94,0.2)]">
+                    <motion.div key="ready" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col gap-3">
+                      {stream && <WebcamPlayer stream={stream} />}
+                      <motion.button onClick={() => toast.info('Exam interface coming soon!')} className="w-full py-3 bg-green-600 hover:bg-green-500 transition-colors rounded-xl font-medium flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(34,197,94,0.2)]">
                         <Play className="w-4 h-4 fill-current" /> Begin Exam
-                     </motion.button>
+                      </motion.button>
+                    </motion.div>
                   )
                 ) : (
                   <motion.button key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => handleStartSystemCheck(exam.id)} className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 transition-colors rounded-xl font-medium flex items-center justify-center gap-2 relative z-10 shadow-[0_0_20px_rgba(99,102,241,0.2)]">
-                     <Video className="w-4 h-4" /> System Check & Join
+                    <Video className="w-4 h-4" /> System Check & Join
                   </motion.button>
                 )}
               </AnimatePresence>
             </motion.div>
           )) : (
             <div className="col-span-full py-16 flex flex-col items-center justify-center bg-white/5 border border-white/10 rounded-2xl border-dashed">
-               <Calendar className="w-12 h-12 text-white/20 mb-4" />
-               <p className="text-white/60 font-medium">No Upcoming Exams</p>
-               <p className="text-sm text-white/40 mt-1">Check back later or contact your instructor.</p>
+              <Calendar className="w-12 h-12 text-white/20 mb-4" />
+              <p className="text-white/60 font-medium">No Upcoming Exams</p>
+              <p className="text-sm text-white/40 mt-1">Check back later or contact your instructor.</p>
             </div>
           )}
         </div>

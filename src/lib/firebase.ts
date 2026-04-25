@@ -137,6 +137,51 @@ export const deleteExam = async (examId: string) => {
   await deleteDoc(doc(db, 'exams', examId));
 };
 
+// Submission & Report Helpers
+export const submitExam = async (examId: string, studentId: string, studentName: string, studentEmail: string, answers: any, incidents: any[], trustScore: number) => {
+  try {
+    const docRef = await addDoc(collection(db, 'submissions'), {
+      examId,
+      studentId,
+      studentName,
+      studentEmail,
+      answers,
+      incidents,
+      trustScore,
+      submittedAt: serverTimestamp(),
+      status: 'pending_review'
+    });
+    return docRef.id;
+  } catch (err) {
+    console.error("Failed to submit exam:", err);
+    throw err;
+  }
+};
+
+export const subscribeToSubmissions = (callback: (submissions: any[]) => void) => {
+  const q = query(collection(db, 'submissions'));
+  return onSnapshot(q, (snapshot) => {
+    const submissions = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    // Sort by most recent first
+    submissions.sort((a: any, b: any) => (b.submittedAt?.toMillis() || 0) - (a.submittedAt?.toMillis() || 0));
+    callback(submissions);
+  }, (error) => {
+    console.error("Error fetching submissions:", error);
+  });
+};
+
+export const getSubmissionDetails = async (submissionId: string) => {
+  const docRef = doc(db, 'submissions', submissionId);
+  const snap = await getDoc(docRef);
+  if (snap.exists()) {
+    return { id: snap.id, ...snap.data() };
+  }
+  return null;
+};
+
 // Settings Helpers
 export const subscribeToSettings = (callback: (settings: any) => void) => {
   const docRef = doc(db, 'settings', 'admin');

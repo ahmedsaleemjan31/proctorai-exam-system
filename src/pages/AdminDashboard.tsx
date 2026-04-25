@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useAppAuth, logout, setUserRole, subscribeToExams, createExam, deleteExam, subscribeToSettings, updateSettings } from '../lib/firebase';
+import { useAppAuth, logout, setUserRole, subscribeToExams, createExam, deleteExam, subscribeToSettings, updateSettings, subscribeToSubmissions } from '../lib/firebase';
 import { ShieldCheck, LogOut, FileCheck2, Users, Settings, Save, RotateCcw, Calendar, Clock, Plus, Trash2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { Navigate, Link } from 'react-router-dom';
@@ -20,6 +20,7 @@ export default function AdminDashboard() {
   const [newExamName, setNewExamName] = useState('');
   const [newExamDate, setNewExamDate] = useState('');
   const [newExamTime, setNewExamTime] = useState('');
+  const [submissions, setSubmissions] = useState<any[]>([]);
 
   useEffect(() => {
     const unsubExams = subscribeToExams((fetchedExams) => {
@@ -34,10 +35,15 @@ export default function AdminDashboard() {
         setLockdown(settings.lockdown ?? true);
       }
     });
+    
+    const unsubSubmissions = subscribeToSubmissions((fetchedSubmissions) => {
+      setSubmissions(fetchedSubmissions);
+    });
 
     return () => {
       unsubExams();
       unsubSettings();
+      unsubSubmissions();
     };
   }, []);
 
@@ -138,15 +144,15 @@ export default function AdminDashboard() {
               <FileCheck2 className="w-5 h-5 text-indigo-400" />
             </div>
             <div className="text-sm text-white/50 mb-1">Active Exams</div>
-            <div className="text-3xl font-semibold">12</div>
+            <div className="text-3xl font-semibold">{exams.length}</div>
           </motion.div>
 
           <motion.div whileHover={{ y: -4 }} className="bg-[#0A0A0C] border border-white/10 rounded-2xl p-6">
             <div className="w-10 h-10 bg-blue-500/10 rounded-xl flex items-center justify-center mb-4">
               <Users className="w-5 h-5 text-blue-400" />
             </div>
-            <div className="text-sm text-white/50 mb-1">Students Online</div>
-            <div className="text-3xl font-semibold">348</div>
+            <div className="text-sm text-white/50 mb-1">Total Submissions</div>
+            <div className="text-3xl font-semibold">{submissions.length}</div>
           </motion.div>
 
           <motion.div whileHover={{ y: -4 }} className="bg-[#0A0A0C] border border-white/10 rounded-2xl p-6">
@@ -154,7 +160,9 @@ export default function AdminDashboard() {
               <ShieldCheck className="w-5 h-5 text-red-400" />
             </div>
             <div className="text-sm text-white/50 mb-1">Flagged Incidents</div>
-            <div className="text-3xl font-semibold text-red-400">7</div>
+            <div className="text-3xl font-semibold text-red-400">
+              {submissions.filter(s => (s.incidents?.length || 0) > 0).length}
+            </div>
           </motion.div>
         </div>
 
@@ -259,30 +267,34 @@ export default function AdminDashboard() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <div className="bg-[#0A0A0C] border border-white/10 rounded-2xl p-6 flex flex-col">
-             <h2 className="text-lg font-medium mb-4">Recent Alerts</h2>
-             <div className="flex flex-col gap-3 flex-1">
-                {/* Placeholder Alerts */}
-                <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5">
-                  <div className="flex gap-4 items-center">
-                    <div className="w-2 h-2 rounded-full bg-red-500" />
-                    <div>
-                      <div className="text-sm font-medium">Multiple faces detected</div>
-                      <div className="text-xs text-white/50">Student: Alice Johnson • CS101 Midterm</div>
+             <h2 className="text-lg font-medium mb-4">Recent Submissions & Alerts</h2>
+             <div className="flex flex-col gap-3 flex-1 overflow-y-auto max-h-[400px] pr-2">
+                {submissions.length > 0 ? submissions.map((sub: any) => {
+                  const hasFlags = sub.incidents && sub.incidents.length > 0;
+                  return (
+                    <div key={sub.id} className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5 hover:border-white/20 transition-colors">
+                      <div className="flex gap-4 items-center">
+                        <div className={`w-2 h-2 rounded-full ${hasFlags ? 'bg-red-500 animate-pulse' : 'bg-green-500'}`} />
+                        <div>
+                          <div className="text-sm font-medium">
+                            {hasFlags ? `${sub.incidents.length} Flags Detected` : 'Clean Session'}
+                          </div>
+                          <div className="text-xs text-white/50">
+                            Student: {sub.studentName} • {sub.examId} • Trust: {sub.trustScore}%
+                          </div>
+                        </div>
+                      </div>
+                      <Link 
+                        to={`/admin/report/${sub.id}`}
+                        className="text-xs px-3 py-1.5 bg-white/10 rounded-md hover:bg-white/20 transition-colors"
+                      >
+                        Review Report
+                      </Link>
                     </div>
-                  </div>
-                  <button className="text-xs px-3 py-1.5 bg-white/10 rounded-md hover:bg-white/20 transition-colors">Review Video</button>
-                </div>
-                
-                <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5">
-                  <div className="flex gap-4 items-center">
-                    <div className="w-2 h-2 rounded-full bg-yellow-500" />
-                    <div>
-                      <div className="text-sm font-medium">Device detected</div>
-                      <div className="text-xs text-white/50">Student: Michael Tran • PH201 Final</div>
-                    </div>
-                  </div>
-                  <button className="text-xs px-3 py-1.5 bg-white/10 rounded-md hover:bg-white/20 transition-colors">Review Video</button>
-                </div>
+                  );
+                }) : (
+                  <div className="text-sm text-white/40 text-center py-8">No submissions yet.</div>
+                )}
              </div>
           </div>
 

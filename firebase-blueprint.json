@@ -37,6 +37,26 @@
         "updatedAt": { "type": "string" }
       },
       "required": ["sensitivity", "allowedApps", "timeLimit", "lockdown", "updatedAt"]
+    },
+    "Submission": {
+      "title": "Submission",
+      "description": "A student's exam submission.",
+      "type": "object",
+      "properties": {
+        "examId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "studentEmail": { "type": "string" },
+        "answers": { "type": "object" },
+        "incidents": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "trustScore": { "type": "number" },
+        "submittedAt": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["examId", "studentId", "studentName", "studentEmail", "incidents", "trustScore", "submittedAt", "status"]
     }
   },
   "firestore": {
@@ -51,6 +71,10 @@
     "/settings/{settingId}": {
       "schema": { "$ref": "#/entities/Settings" },
       "description": "Global settings. Typically singleton doc e.g. /settings/admin."
+    },
+    "/submissions/{submissionId}": {
+      "schema": { "$ref": "#/entities/Submission" },
+      "description": "Exam submissions and proctoring reports."
     }
   }
 }

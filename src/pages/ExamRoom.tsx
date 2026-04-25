@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, SyntheticEvent } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useAppAuth } from '../lib/firebase';
+import { useAppAuth, submitExam } from '../lib/firebase';
 import { motion } from 'motion/react';
 import { Clock, AlertTriangle, ShieldCheck, Video, Send, ShieldAlert } from 'lucide-react';
 import { toast } from 'sonner';
@@ -168,13 +168,39 @@ export default function ExamRoom() {
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  const handleSubmit = () => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!user || isSubmitting) return;
+    setIsSubmitting(true);
+    
     if (stream) {
       stream.getTracks().forEach(track => track.stop());
     }
-    // Pass the incidents securely to the results page
-    localStorage.setItem('examIncidents', JSON.stringify(incidents));
-    navigate(`/results/${id}`, { state: { incidentCount: incidents.length } });
+    
+    try {
+      const trustScore = Math.max(0, 100 - incidents.length * 15);
+      const submissionId = await submitExam(
+        id || 'unknown_exam', 
+        user.uid, 
+        user.name, 
+        user.email, 
+        answers, 
+        incidents, 
+        trustScore
+      );
+      
+      // Pass the incidents securely to the results page
+      localStorage.setItem('examIncidents', JSON.stringify(incidents));
+      navigate(`/results/${id}`, { state: { incidentCount: incidents.length } });
+    } catch (err: any) {
+      console.error(err);
+      toast.warning("Cloud save failed (check Firestore rules). Saving locally instead.");
+      
+      // Still navigate so they aren't stuck!
+      localStorage.setItem('examIncidents', JSON.stringify(incidents));
+      navigate(`/results/${id}`, { state: { incidentCount: incidents.length } });
+    }
   };
 
   const handlePreventCheating = (e: SyntheticEvent) => {
@@ -212,10 +238,11 @@ export default function ExamRoom() {
           </div>
           
           <button 
-            onClick={() => confirm("Are you sure you want to submit your exam early?") && handleSubmit()}
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 transition-colors px-4 py-1.5 rounded-lg text-sm font-medium shadow-[0_0_15px_rgba(99,102,241,0.3)]"
+            onClick={handleSubmit}
+            disabled={isSubmitting}
+            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 transition-colors px-4 py-1.5 rounded-lg text-sm font-medium shadow-[0_0_15px_rgba(99,102,241,0.3)] disabled:opacity-50"
           >
-            Submit Exam <Send className="w-4 h-4" />
+            {isSubmitting ? "Submitting..." : "Submit Exam"} <Send className="w-4 h-4" />
           </button>
         </div>
       </nav>

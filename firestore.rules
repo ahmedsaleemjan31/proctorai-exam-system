@@ -47,6 +47,18 @@ service cloud.firestore {
              data.updatedAt is timestamp;
     }
 
+    function isValidSubmission(data) {
+      return data.keys().hasAll(['examId', 'studentId', 'studentName', 'studentEmail', 'answers', 'incidents', 'trustScore', 'submittedAt', 'status']) &&
+             data.examId is string &&
+             data.studentId is string &&
+             data.studentName is string &&
+             data.studentEmail is string &&
+             data.incidents is list &&
+             data.trustScore is number &&
+             data.submittedAt is timestamp &&
+             data.status is string;
+    }
+
     // Users Collection
     match /users/{userId} {
       // Allow read if the user is fetching their own profile or if the requester is an admin
@@ -105,6 +117,16 @@ service cloud.firestore {
                        isValidSettings(incoming()) &&
                        incoming().diff(existing()).affectedKeys().hasOnly(['sensitivity', 'allowedApps', 'timeLimit', 'lockdown', 'updatedAt']) &&
                        incoming().updatedAt == request.time;
+    }
+
+    // Submissions Collection
+    match /submissions/{submissionId} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.studentId == request.auth.uid);
+      
+      allow create: if isSignedIn() &&
+                       isValidSubmission(incoming()) &&
+                       incoming().studentId == request.auth.uid &&
+                       incoming().submittedAt == request.time;
     }
   }
 }

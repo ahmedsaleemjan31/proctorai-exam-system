@@ -1,0 +1,56 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user in the proctoring system (Admin or Student).",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "student"] },
+        "name": { "type": "string" },
+        "createdAt": { "type": "string", "description": "Timestamp" }
+      },
+      "required": ["email", "role", "name", "createdAt"]
+    },
+    "Exam": {
+      "title": "Exam",
+      "description": "An exam scheduled by an admin.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["name", "date", "time", "createdBy", "createdAt"]
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "Global admin settings",
+      "type": "object",
+      "properties": {
+        "sensitivity": { "type": "string" },
+        "allowedApps": { "type": "string" },
+        "timeLimit": { "type": "number" },
+        "lockdown": { "type": "boolean" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["sensitivity", "allowedApps", "timeLimit", "lockdown", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profiles managed via Google Auth and internal role assignment."
+    },
+    "/exams/{examId}": {
+      "schema": { "$ref": "#/entities/Exam" },
+      "description": "Exams scheduled by an admin."
+    },
+    "/settings/{settingId}": {
+      "schema": { "$ref": "#/entities/Settings" },
+      "description": "Global settings. Typically singleton doc e.g. /settings/admin."
+    }
+  }
+}

@@ -1,15 +1,22 @@
-import { useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { CheckCircle2, ShieldCheck, ArrowRight, Award } from 'lucide-react';
+import { CheckCircle2, ShieldCheck, ArrowRight, Award, AlertTriangle, ShieldAlert } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 export default function ExamResults() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const [incidents, setIncidents] = useState<number>(
+    location.state?.incidentCount || 
+    (localStorage.getItem('examIncidents') ? JSON.parse(localStorage.getItem('examIncidents')!).length : 0)
+  );
 
   useEffect(() => {
-    // Trigger confetti on load
+    // Only trigger confetti if 0 incidents
+    if (incidents > 0) return;
     const duration = 3 * 1000;
     const end = Date.now() + duration;
 
@@ -47,15 +54,19 @@ export default function ExamResults() {
         transition={{ duration: 0.5, type: 'spring' }}
         className="bg-[#0A0A0C] border border-white/10 rounded-3xl p-10 md:p-14 max-w-lg w-full text-center relative z-10 shadow-2xl"
       >
-        <div className="w-20 h-20 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-8 relative">
+        <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-8 relative ${incidents === 0 ? 'bg-green-500/10' : 'bg-red-500/10'}`}>
           <motion.div 
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
             transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
           >
-            <CheckCircle2 className="w-10 h-10 text-green-400" />
+            {incidents === 0 ? (
+              <CheckCircle2 className="w-10 h-10 text-green-400" />
+            ) : (
+              <ShieldAlert className="w-10 h-10 text-red-400" />
+            )}
           </motion.div>
-          <div className="absolute inset-0 border-2 border-green-500/20 rounded-full animate-ping" />
+          <div className={`absolute inset-0 border-2 rounded-full animate-ping ${incidents === 0 ? 'border-green-500/20' : 'border-red-500/20'}`} />
         </div>
 
         <h1 className="text-3xl font-display font-bold mb-4">Exam Submitted Successfully!</h1>
@@ -64,10 +75,14 @@ export default function ExamResults() {
         </p>
 
         <div className="grid grid-cols-2 gap-4 mb-10">
-          <div className="bg-[#050505] border border-white/5 rounded-2xl p-4 flex flex-col items-center justify-center gap-2">
-             <ShieldCheck className="w-6 h-6 text-indigo-400" />
+          <div className={`bg-[#050505] border border-white/5 rounded-2xl p-4 flex flex-col items-center justify-center gap-2 ${incidents > 0 && 'border-red-500/20 bg-red-500/5'}`}>
+             {incidents === 0 ? <ShieldCheck className="w-6 h-6 text-indigo-400" /> : <AlertTriangle className="w-6 h-6 text-red-400" />}
              <span className="text-xs text-white/50 font-medium uppercase tracking-wider">Integrity Check</span>
-             <span className="text-sm font-bold text-green-400">Passed</span>
+             {incidents === 0 ? (
+               <span className="text-sm font-bold text-green-400">Passed</span>
+             ) : (
+               <span className="text-sm font-bold text-red-400">{incidents} Flags</span>
+             )}
           </div>
           <div className="bg-[#050505] border border-white/5 rounded-2xl p-4 flex flex-col items-center justify-center gap-2">
              <Award className="w-6 h-6 text-purple-400" />

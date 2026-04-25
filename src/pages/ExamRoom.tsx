@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, SyntheticEvent } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAppAuth } from '../lib/firebase';
 import { motion } from 'motion/react';
-import { Clock, AlertTriangle, ShieldCheck, Video, Send } from 'lucide-react';
+import { Clock, AlertTriangle, ShieldCheck, Video, Send, ShieldAlert } from 'lucide-react';
 import { toast } from 'sonner';
+import * as faceapi from '@vladmandic/face-api';
 
 export default function ExamRoom() {
   const { id } = useParams();
@@ -16,6 +17,87 @@ export default function ExamRoom() {
   
   const [answers, setAnswers] = useState<Record<number, string>>({});
   
+  const [incidents, setIncidents] = useState<{time: string, type: string}[]>([]);
+  const [isModelLoaded, setIsModelLoaded] = useState(false);
+  const [aiWarning, setAiWarning] = useState<string | null>(null);
+
+  // Browser Lockdown
+  useEffect(() => {
+    const requestFS = () => {
+      if (document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      }
+    };
+    // Attempt fullscreen immediately
+    requestFS();
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        setIncidents(prev => [...prev, { time: new Date().toLocaleTimeString(), type: "Tab Switched / Out of Focus" }]);
+        toast.error("Warning: Tab switching is prohibited!", { style: { background: '#ef4444', color: 'white', border: 'none' } });
+      }
+    };
+
+    const handleFullscreenChange = () => {
+      if (!document.fullscreenElement) {
+        setIncidents(prev => [...prev, { time: new Date().toLocaleTimeString(), type: "Exited Fullscreen" }]);
+        toast.error("Warning: You left fullscreen mode!", { style: { background: '#ef4444', color: 'white', border: 'none' } });
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+    };
+  }, []);
+
+  // Load AI Models
+  useEffect(() => {
+    const loadModels = async () => {
+      try {
+        await faceapi.nets.tinyFaceDetector.loadFromUri('https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/');
+        setIsModelLoaded(true);
+      } catch (err) {
+        console.error("Failed to load AI models:", err);
+      }
+    };
+    loadModels();
+  }, []);
+
+  // Real AI Face Detection Loop
+  useEffect(() => {
+    if (!isModelLoaded || !stream || !videoRef.current) return;
+
+    const video = videoRef.current;
+    
+    const detectFaces = async () => {
+      if (video.paused || video.ended) return;
+      try {
+        const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 160 }));
+        if (detections.length === 0) {
+          setAiWarning("Face Not Detected");
+          setIncidents(prev => [...prev, { time: new Date().toLocaleTimeString(), type: "Face Not Detected" }]);
+        } else if (detections.length > 1) {
+          setAiWarning("Multiple Faces Detected!");
+          setIncidents(prev => [...prev, { time: new Date().toLocaleTimeString(), type: "Multiple Faces Detected" }]);
+        } else {
+          setAiWarning(null); // Exactly 1 face, all good
+        }
+      } catch (err) {
+        console.error("Face detection error:", err);
+      }
+    };
+
+    const interval = setInterval(detectFaces, 2500); // Scan every 2.5 seconds
+    return () => clearInterval(interval);
+  }, [isModelLoaded, stream]);
+
   // Dummy questions for demonstration
   const questions = [
     {
@@ -90,7 +172,14 @@ export default function ExamRoom() {
     if (stream) {
       stream.getTracks().forEach(track => track.stop());
     }
-    navigate(`/results/${id}`);
+    // Pass the incidents securely to the results page
+    localStorage.setItem('examIncidents', JSON.stringify(incidents));
+    navigate(`/results/${id}`, { state: { incidentCount: incidents.length } });
+  };
+
+  const handlePreventCheating = (e: SyntheticEvent) => {
+    e.preventDefault();
+    toast.warning("Copy, Paste, and Right-Click are disabled.");
   };
 
   if (loading) return null;
@@ -100,7 +189,12 @@ export default function ExamRoom() {
   }
 
   return (
-    <div className="min-h-screen bg-[#050505] text-[#FAFAFA] font-sans relative overflow-hidden flex flex-col">
+    <div 
+      className="min-h-screen bg-[#050505] text-[#FAFAFA] font-sans relative overflow-hidden flex flex-col select-none"
+      onCopy={handlePreventCheating}
+      onPaste={handlePreventCheating}
+      onContextMenu={handlePreventCheating}
+    >
       {/* Top Navbar */}
       <nav className="h-16 border-b border-white/5 bg-[#0A0A0C] flex items-center justify-between px-6 sticky top-0 z-50">
         <div className="flex items-center gap-3">
@@ -203,12 +297,22 @@ export default function ExamRoom() {
               <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
               <span className="text-[10px] font-bold text-white tracking-wider uppercase">Recording</span>
             </div>
+            {/* Dynamic AI Overlay */}
+            {aiWarning && (
+              <div className="absolute inset-0 bg-red-500/30 flex flex-col items-center justify-center backdrop-blur-sm z-10 transition-all border-2 border-red-500 rounded-xl">
+                <ShieldAlert className="w-10 h-10 text-red-500 mb-2 animate-bounce" />
+                <span className="text-xs font-bold text-white uppercase tracking-widest drop-shadow-md text-center px-4">
+                  {aiWarning}
+                </span>
+              </div>
+            )}
             
-            {/* Warning Overlay (simulated AI detection) */}
-            <div className="absolute inset-0 bg-red-500/20 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center backdrop-blur-[2px]">
-              <AlertTriangle className="w-8 h-8 text-red-500 mb-1" />
-              <span className="text-xs font-medium text-white drop-shadow-md">Keep face in view</span>
-            </div>
+            {/* Loading AI State */}
+            {!isModelLoaded && !aiWarning && (
+               <div className="absolute top-2 left-2 px-2 py-1 bg-indigo-500/80 backdrop-blur-md rounded flex items-center gap-1.5">
+                 <span className="text-[10px] font-bold text-white tracking-wider uppercase">Loading AI...</span>
+               </div>
+            )}
           </>
         )}
       </div>

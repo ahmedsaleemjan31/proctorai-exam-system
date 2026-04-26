@@ -12,6 +12,10 @@ export default function AdminDashboard() {
   const [allowedApps, setAllowedApps] = useState('Calculator, Notepad');
   const [timeLimit, setTimeLimit] = useState(120);
   const [lockdown, setLockdown] = useState(true);
+  const [isGazeEnabled, setIsGazeEnabled] = useState(true);
+  const [isObjectEnabled, setIsObjectEnabled] = useState(true);
+  const [isAudioEnabled, setIsAudioEnabled] = useState(true);
+  const [isIdentityEnabled, setIsIdentityEnabled] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
   // Calendar / Exam Schedule State
@@ -48,6 +52,10 @@ export default function AdminDashboard() {
         setAllowedApps(settings.allowedApps ?? 'Calculator, Notepad');
         setTimeLimit(settings.timeLimit ?? 120);
         setLockdown(settings.lockdown ?? true);
+        setIsGazeEnabled(settings.isGazeEnabled ?? true);
+        setIsObjectEnabled(settings.isObjectEnabled ?? true);
+        setIsAudioEnabled(settings.isAudioEnabled ?? true);
+        setIsIdentityEnabled(settings.isIdentityEnabled ?? true);
       }
     });
     
@@ -72,7 +80,11 @@ export default function AdminDashboard() {
         sensitivity,
         allowedApps,
         timeLimit,
-        lockdown
+        lockdown,
+        isGazeEnabled,
+        isObjectEnabled,
+        isAudioEnabled,
+        isIdentityEnabled
       });
       toast.success('Settings saved to database successfully!');
     } catch (err: any) {
@@ -429,6 +441,40 @@ export default function AdminDashboard() {
                           <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${lockdown ? 'translate-x-5' : 'translate-x-0'}`} />
                         </div>
                         <span className="text-sm font-medium text-white/70 group-hover:text-white transition-colors">Browser Lockdown</span>
+                      </label>
+                   </div>
+                </div>
+
+                <div className="space-y-4 border-t border-white/5 pt-6">
+                   <h3 className="text-xs font-bold uppercase tracking-widest text-white/30 mb-2">Advanced AI Modules</h3>
+                   
+                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <label className="flex items-center justify-between p-3 bg-white/5 border border-white/5 rounded-xl cursor-pointer hover:bg-white/10 transition-colors">
+                        <span className="text-sm text-white/70">Gaze Tracking</span>
+                        <div className={`w-8 h-4 rounded-full relative transition-colors ${isGazeEnabled ? 'bg-indigo-500' : 'bg-white/10'}`} onClick={() => setIsGazeEnabled(!isGazeEnabled)}>
+                          <div className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${isGazeEnabled ? 'translate-x-4' : 'translate-x-0'}`} />
+                        </div>
+                      </label>
+
+                      <label className="flex items-center justify-between p-3 bg-white/5 border border-white/5 rounded-xl cursor-pointer hover:bg-white/10 transition-colors">
+                        <span className="text-sm text-white/70">Object Detection</span>
+                        <div className={`w-8 h-4 rounded-full relative transition-colors ${isObjectEnabled ? 'bg-indigo-500' : 'bg-white/10'}`} onClick={() => setIsObjectEnabled(!isObjectEnabled)}>
+                          <div className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${isObjectEnabled ? 'translate-x-4' : 'translate-x-0'}`} />
+                        </div>
+                      </label>
+
+                      <label className="flex items-center justify-between p-3 bg-white/5 border border-white/5 rounded-xl cursor-pointer hover:bg-white/10 transition-colors">
+                        <span className="text-sm text-white/70">Audio Monitoring</span>
+                        <div className={`w-8 h-4 rounded-full relative transition-colors ${isAudioEnabled ? 'bg-indigo-500' : 'bg-white/10'}`} onClick={() => setIsAudioEnabled(!isAudioEnabled)}>
+                          <div className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${isAudioEnabled ? 'translate-x-4' : 'translate-x-0'}`} />
+                        </div>
+                      </label>
+
+                      <label className="flex items-center justify-between p-3 bg-white/5 border border-white/5 rounded-xl cursor-pointer hover:bg-white/10 transition-colors">
+                        <span className="text-sm text-white/70">Identity Selfie</span>
+                        <div className={`w-8 h-4 rounded-full relative transition-colors ${isIdentityEnabled ? 'bg-indigo-500' : 'bg-white/10'}`} onClick={() => setIsIdentityEnabled(!isIdentityEnabled)}>
+                          <div className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${isIdentityEnabled ? 'translate-x-4' : 'translate-x-0'}`} />
+                        </div>
                       </label>
                    </div>
                 </div>

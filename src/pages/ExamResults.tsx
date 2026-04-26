@@ -9,10 +9,16 @@ export default function ExamResults() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [incidents, setIncidents] = useState<number>(
-    location.state?.incidentCount || 
-    (localStorage.getItem('examIncidents') ? JSON.parse(localStorage.getItem('examIncidents')!).length : 0)
-  );
+  const [incidents, setIncidents] = useState<number>(() => {
+    if (location.state?.incidentCount !== undefined) return location.state.incidentCount;
+    const stored = localStorage.getItem('examIncidents');
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      // Filter out meta-events like Identity Verified so they don't count as flags
+      return parsed.filter((i: any) => !i.type.includes('Identity Verified')).length;
+    }
+    return 0;
+  });
 
   useEffect(() => {
     // Only trigger confetti if 0 incidents

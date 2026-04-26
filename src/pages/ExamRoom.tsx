@@ -5,6 +5,9 @@ import { motion } from 'motion/react';
 import { Clock, AlertTriangle, ShieldCheck, Video, Send, ShieldAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import * as faceapi from '@vladmandic/face-api';
+import * as cocoSsd from '@tensorflow-models/coco-ssd';
+import * as tf from '@tensorflow/tfjs';
+import { Camera, Shield, Check, Mic, Monitor, UserCheck } from 'lucide-react';
 
 export default function ExamRoom() {
   const { id } = useParams();
@@ -19,6 +22,19 @@ export default function ExamRoom() {
   const [isModelLoaded, setIsModelLoaded] = useState(false);
   const [aiWarning, setAiWarning] = useState<string | null>(null);
   const [examData, setExamData] = useState<any>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Advanced AI State
+  const [verificationStage, setVerificationStage] = useState<'idle' | 'verifying' | 'completed'>('idle');
+  const [verificationPhoto, setVerificationPhoto] = useState<string | null>(null);
+  const [objectModel, setObjectModel] = useState<cocoSsd.ObjectDetection | null>(null);
+  const [audioLevel, setAudioLevel] = useState(0);
+  const audioLevelRef = useRef(0);
+  const [isAudioProctoringEnabled, setIsAudioProctoringEnabled] = useState(true);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const lastIncidentTimeRef = useRef<Record<string, number>>({});
+  const faceMissingCountRef = useRef(0);
 
   // Browser Lockdown
   useEffect(() => {
@@ -56,46 +72,158 @@ export default function ExamRoom() {
     };
   }, []);
 
+  const [modelError, setModelError] = useState<string | null>(null);
+
+  // Timeout for model loading to prevent being stuck
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (!isModelLoaded && !modelError) {
+        setModelError("Loading is taking longer than expected...");
+      }
+    }, 10000);
+    return () => clearTimeout(timer);
+  }, [isModelLoaded, modelError]);
+
   // Load AI Models
   useEffect(() => {
     const loadModels = async () => {
       try {
-        await faceapi.nets.tinyFaceDetector.loadFromUri('https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/');
+        // Ensure TensorFlow is ready
+        await tf.ready();
+        
+        await Promise.all([
+          faceapi.nets.tinyFaceDetector.loadFromUri('https://vladmandic.github.io/face-api/model/'),
+          faceapi.nets.faceLandmark68Net.loadFromUri('https://vladmandic.github.io/face-api/model/'),
+        ]);
+        const model = await cocoSsd.load();
+        setObjectModel(model);
         setIsModelLoaded(true);
       } catch (err) {
         console.error("Failed to load AI models:", err);
+        setModelError("Model loading failed (CORS or Connection)");
+        // Don't toast error here to avoid spamming, the UI will show it
       }
     };
     loadModels();
   }, []);
 
-  // Real AI Face Detection Loop
+  // Real AI Detection Loop (Faces, Gaze, Objects)
   useEffect(() => {
-    if (!isModelLoaded || !stream || !videoRef.current) return;
+    if (!isModelLoaded || !stream || !videoRef.current || verificationStage !== 'completed' || isSubmitting) return;
 
     const video = videoRef.current;
     
-    const detectFaces = async () => {
-      if (video.paused || video.ended) return;
+    // Warm-up period to avoid false positives at start
+    const startTime = Date.now();
+    
+    const runDetections = async () => {
+      if (video.paused || video.ended || !stream.active || (Date.now() - startTime < 3000)) return;
       try {
-        const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 160 }));
+        // 1. Face & Gaze Detection
+        const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 160 })).withFaceLandmarks();
+        
+        let newWarning: string | null = null;
+        const now = Date.now();
+
         if (detections.length === 0) {
-          setAiWarning("Face Not Detected");
-          setIncidents(prev => [...prev, { time: new Date().toLocaleTimeString(), type: "Face Not Detected" }]);
+          faceMissingCountRef.current++;
+          newWarning = "Face Not Detected";
+          
+          if (faceMissingCountRef.current >= 2 && now - (lastIncidentTimeRef.current['face_missing'] || 0) > 20000) {
+            setIncidents(prev => [...prev, { time: new Date().toLocaleTimeString(), type: "Face Not Detected" }]);
+            lastIncidentTimeRef.current['face_missing'] = now;
+          }
         } else if (detections.length > 1) {
-          setAiWarning("Multiple Faces Detected!");
-          setIncidents(prev => [...prev, { time: new Date().toLocaleTimeString(), type: "Multiple Faces Detected" }]);
+          faceMissingCountRef.current = 0;
+          newWarning = "Multiple Faces Detected!";
+          if (now - (lastIncidentTimeRef.current['multi_face'] || 0) > 10000) {
+            setIncidents(prev => [...prev, { time: new Date().toLocaleTimeString(), type: "Multiple Faces Detected" }]);
+            lastIncidentTimeRef.current['multi_face'] = now;
+          }
         } else {
-          setAiWarning(null); // Exactly 1 face, all good
+          faceMissingCountRef.current = 0;
+          // Face is present and single - no additional gaze check
+          newWarning = null;
+        }
+
+        // 2. Object Detection
+        if (objectModel && !newWarning) {
+          const objDetections = await objectModel.detect(video);
+          const forbidden = objDetections.find(d => ['cell phone', 'book', 'laptop'].includes(d.class));
+          if (forbidden) {
+            newWarning = `Prohibited Object: ${forbidden.class}`;
+            if (now - (lastIncidentTimeRef.current['object'] || 0) > 15000) {
+              setIncidents(prev => [...prev, { time: new Date().toLocaleTimeString(), type: `Object Detected: ${forbidden.class}` }]);
+              lastIncidentTimeRef.current['object'] = now;
+            }
+          }
+        }
+
+        if (newWarning !== aiWarning) {
+          setAiWarning(newWarning);
         }
       } catch (err) {
-        console.error("Face detection error:", err);
+        console.error("Detection error:", err);
       }
     };
 
-    const interval = setInterval(detectFaces, 2500); // Scan every 2.5 seconds
+    const interval = setInterval(runDetections, 4000); 
     return () => clearInterval(interval);
-  }, [isModelLoaded, stream]);
+  }, [isModelLoaded, stream, verificationStage, objectModel, aiWarning, isSubmitting]);
+
+  // Audio Proctoring
+  useEffect(() => {
+    if (!stream || !isAudioProctoringEnabled || verificationStage !== 'completed') return;
+
+    const audioTrack = stream.getAudioTracks()[0];
+    if (!audioTrack) return;
+
+    const context = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const source = context.createMediaStreamSource(new MediaStream([audioTrack]));
+    const analyser = context.createAnalyser();
+    analyser.fftSize = 256;
+    source.connect(analyser);
+    
+    analyserRef.current = analyser;
+    audioContextRef.current = context;
+
+    const bufferLength = analyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+
+    const checkAudio = () => {
+      if (!analyserRef.current) return;
+      analyserRef.current.getByteFrequencyData(dataArray);
+      let sum = 0;
+      for (let i = 0; i < bufferLength; i++) sum += dataArray[i];
+      const average = sum / bufferLength;
+      
+      // Throttle visual update to prevent excessive re-renders
+      if (Math.abs(audioLevelRef.current - average) > 2) {
+        audioLevelRef.current = average;
+        setAudioLevel(average);
+      }
+
+      if (average > 50) { // Threshold for suspicious noise
+        const now = Date.now();
+        const lastNoise = lastIncidentTimeRef.current['noise'] || 0;
+        
+        if (now - lastNoise > 10000) { // 10 second cooldown for noise incidents
+          setIncidents(prev => [...prev, { time: new Date().toLocaleTimeString(), type: "Suspicious Noise Detected" }]);
+          toast.warning("Loud noise detected! Please remain quiet.", { duration: 2000 });
+          lastIncidentTimeRef.current['noise'] = now;
+        }
+      }
+    };
+
+    const audioInterval = setInterval(checkAudio, 100);
+
+    return () => {
+      clearInterval(audioInterval);
+      context.close();
+      analyserRef.current = null;
+      audioContextRef.current = null;
+    };
+  }, [stream, isAudioProctoringEnabled, verificationStage]);
 
   // Fetch exam data + validate time window
   useEffect(() => {
@@ -175,7 +303,6 @@ export default function ExamRoom() {
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async () => {
     if (!user || isSubmitting) return;
@@ -183,6 +310,11 @@ export default function ExamRoom() {
     
     if (stream) {
       stream.getTracks().forEach(track => track.stop());
+    }
+
+    const finalIncidents = [...incidents];
+    if (verificationPhoto) {
+      finalIncidents.push({ time: "Pre-Exam", type: `Identity Verified (Photo Captured)` });
     }
     
     try {
@@ -193,12 +325,17 @@ export default function ExamRoom() {
         user.name, 
         user.email, 
         answers, 
-        incidents, 
+        finalIncidents, 
         trustScore
       );
       
+      // Store verification photo in local storage for the report (simulating DB storage for now)
+      if (verificationPhoto) {
+        localStorage.setItem(`verification_${submissionId}`, verificationPhoto);
+      }
+      
       // Pass the incidents securely to the results page
-      localStorage.setItem('examIncidents', JSON.stringify(incidents));
+      localStorage.setItem('examIncidents', JSON.stringify(finalIncidents));
       navigate(`/results/${id}`, { state: { incidentCount: incidents.length } });
     } catch (err: any) {
       console.error(err);
@@ -228,6 +365,126 @@ export default function ExamRoom() {
       onPaste={handlePreventCheating}
       onContextMenu={handlePreventCheating}
     >
+      {/* Verification Overlay */}
+      {verificationStage !== 'completed' && (
+        <div className="fixed inset-0 z-[100] bg-[#050505] flex items-center justify-center p-6">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="max-w-2xl w-full bg-[#0A0A0C] border border-white/10 rounded-3xl p-8 shadow-2xl relative overflow-hidden"
+          >
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500 animate-gradient-x" />
+            
+            <div className="text-center mb-8">
+              <div className="w-16 h-16 bg-indigo-500/10 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-indigo-500/20">
+                <Shield className="w-8 h-8 text-indigo-400" />
+              </div>
+              <h2 className="text-2xl font-display font-bold mb-2">Secure Identity Verification</h2>
+              <p className="text-white/50">Please complete the security check to start your exam.</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+              <div className="space-y-6">
+                <div className="flex gap-4">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 border ${stream ? 'bg-green-500/10 border-green-500/50 text-green-400' : 'bg-white/5 border-white/10 text-white/30'}`}>
+                    <Camera className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium">Camera Check</div>
+                    <div className="text-xs text-white/40">{stream ? 'Camera connected' : 'Accessing camera...'}</div>
+                  </div>
+                </div>
+
+                <div className="flex gap-4">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 border ${isModelLoaded ? 'bg-green-500/10 border-green-500/50 text-green-400' : modelError ? 'bg-red-500/10 border-red-500/50 text-red-400' : 'bg-white/5 border-white/10 text-white/30'}`}>
+                    <Shield className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-sm font-medium">AI Security Guard</div>
+                    <div className="text-xs text-white/40">
+                      {isModelLoaded ? 'AI Models ready' : modelError ? <span className="text-red-400">{modelError}</span> : 'Loading security models...'}
+                    </div>
+                    {modelError && (
+                      <button 
+                        onClick={() => { setIsModelLoaded(true); setModelError(null); }}
+                        className="text-[10px] text-indigo-400 hover:underline mt-1 block"
+                      >
+                        Skip AI Check (Testing Mode)
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex gap-4">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 border ${verificationPhoto ? 'bg-green-500/10 border-green-500/50 text-green-400' : 'bg-white/5 border-white/10 text-white/30'}`}>
+                    <UserCheck className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium">Identity Snap</div>
+                    <div className="text-xs text-white/40">{verificationPhoto ? 'Photo captured' : 'Take a photo to proceed'}</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="relative group">
+                <div className="aspect-square bg-black rounded-2xl border border-white/10 overflow-hidden relative">
+                  {stream ? (
+                    <>
+                      <video 
+                        autoPlay 
+                        playsInline 
+                        muted 
+                        ref={(v) => { if (v) v.srcObject = stream; }}
+                        className="w-full h-full object-cover transform -scale-x-100" 
+                      />
+                      {!verificationPhoto && (
+                        <div className="absolute inset-0 border-2 border-dashed border-indigo-500/30 rounded-2xl m-4 pointer-events-none" />
+                      )}
+                      {verificationPhoto && (
+                        <div className="absolute inset-0 bg-green-500/20 backdrop-blur-[2px] flex items-center justify-center">
+                          <div className="bg-white text-black p-2 rounded-full">
+                            <Check className="w-6 h-6" />
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                    </div>
+                  )}
+                </div>
+                
+                <button 
+                  onClick={() => {
+                    const video = document.querySelector('video');
+                    const canvas = document.createElement('canvas');
+                    if (video) {
+                      canvas.width = video.videoWidth;
+                      canvas.height = video.videoHeight;
+                      canvas.getContext('2d')?.drawImage(video, 0, 0);
+                      setVerificationPhoto(canvas.toDataURL('image/jpeg'));
+                      toast.success("Identity snap captured!");
+                    }
+                  }}
+                  disabled={!stream}
+                  className="absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 bg-white text-black rounded-full text-xs font-bold hover:scale-105 transition-transform disabled:opacity-50"
+                >
+                  {verificationPhoto ? "Retake Photo" : "Capture Snap"}
+                </button>
+              </div>
+            </div>
+
+            <button 
+              onClick={() => setVerificationStage('completed')}
+              disabled={!verificationPhoto || !isModelLoaded}
+              className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(99,102,241,0.4)]"
+            >
+              Start Exam Now
+            </button>
+          </motion.div>
+        </div>
+      )}
       {/* Top Navbar */}
       <nav className="h-16 border-b border-white/5 bg-[#0A0A0C] flex items-center justify-between px-6 sticky top-0 z-50">
         <div className="flex items-center gap-3">
@@ -347,6 +604,17 @@ export default function ExamRoom() {
                  <span className="text-[10px] font-bold text-white tracking-wider uppercase">Loading AI...</span>
                </div>
             )}
+            
+            {/* Audio Indicator */}
+            <div className="absolute bottom-2 left-2 flex items-center gap-1">
+               <Mic className={`w-3 h-3 ${audioLevel > 30 ? 'text-red-400' : 'text-white/50'}`} />
+               <div className="w-12 h-1 bg-white/10 rounded-full overflow-hidden">
+                 <div 
+                   className={`h-full transition-all duration-100 ${audioLevel > 30 ? 'bg-red-400' : 'bg-indigo-400'}`} 
+                   style={{ width: `${Math.min(100, audioLevel * 2)}%` }} 
+                 />
+               </div>
+            </div>
           </>
         )}
       </div>

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ShieldAlert, CheckCircle2, AlertTriangle, ArrowLeft, Video, Clock, EyeOff, MonitorSmartphone } from 'lucide-react';
+import { ShieldAlert, CheckCircle2, AlertTriangle, ArrowLeft, Video, Clock, EyeOff, MonitorSmartphone, UserCheck, Mic, PackageSearch, Eye } from 'lucide-react';
 import { motion } from 'motion/react';
 import { getSubmissionDetails } from '../lib/firebase';
 
@@ -11,12 +11,17 @@ export default function ProctoringReport() {
 
   const [report, setReport] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [verificationPhoto, setVerificationPhoto] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
     getSubmissionDetails(id).then(data => {
       setReport(data);
       setLoading(false);
+      
+      // Load verification photo from local storage (simulation)
+      const storedPhoto = localStorage.getItem(`verification_${id}`);
+      if (storedPhoto) setVerificationPhoto(storedPhoto);
     }).catch(err => {
       console.error(err);
       setLoading(false);
@@ -26,6 +31,10 @@ export default function ProctoringReport() {
   const getIconForType = (type: string) => {
     if (type.includes("Tab")) return MonitorSmartphone;
     if (type.includes("Face")) return ShieldAlert;
+    if (type.includes("Looking Away")) return Eye;
+    if (type.includes("Object")) return PackageSearch;
+    if (type.includes("Noise")) return Mic;
+    if (type.includes("Identity")) return UserCheck;
     return EyeOff;
   };
 
@@ -120,7 +129,7 @@ export default function ProctoringReport() {
           <div className="space-y-4">
             {flags.map((flag: any, i: number) => {
               const Icon = getIconForType(flag.type);
-              const isHighSeverity = flag.type.includes('Face') || flag.type.includes('Tab');
+              const isHighSeverity = flag.type.includes('Face') || flag.type.includes('Tab') || flag.type.includes('Object') || flag.type.includes('Looking Away');
               return (
                 <div key={i} className="flex gap-6 items-start bg-white/5 border border-white/5 p-4 rounded-xl hover:bg-white/10 transition-colors cursor-pointer">
                   <div className="font-mono text-sm text-white/40 pt-1 w-20">{flag.time}</div>
@@ -155,6 +164,17 @@ export default function ProctoringReport() {
                <div className="text-white/50 text-sm mb-1">Submission Date</div>
                <div className="text-xl font-display font-medium mt-1">{report.submittedAt ? new Date(report.submittedAt.toMillis()).toLocaleString() : 'N/A'}</div>
              </div>
+
+             {verificationPhoto && (
+               <div className="col-span-full mt-6">
+                 <h3 className="text-sm font-medium text-white/50 mb-4 flex items-center gap-2">
+                   <UserCheck className="w-4 h-4" /> Identity Verification Photo
+                 </h3>
+                 <div className="w-48 aspect-square rounded-2xl overflow-hidden border border-white/10 shadow-xl bg-black">
+                   <img src={verificationPhoto} alt="Verification" className="w-full h-full object-cover transform -scale-x-100" />
+                 </div>
+               </div>
+             )}
            </div>
         )}
 

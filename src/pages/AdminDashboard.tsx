@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useAppAuth, logout, setUserRole, subscribeToExams, createExam, deleteExam, subscribeToSettings, updateSettings, subscribeToSubmissions } from '../lib/firebase';
-import { ShieldCheck, LogOut, FileCheck2, Users, Settings, Save, RotateCcw, Calendar, Clock, Plus, Trash2, Search, X, AlignLeft, ListChecks, SortDesc } from 'lucide-react';
-import { motion } from 'motion/react';
+import { ShieldCheck, LogOut, FileCheck2, Users, Settings, Save, RotateCcw, Calendar, Clock, Plus, Trash2, Search, X, AlignLeft, ListChecks, SortDesc, BrainCircuit, Sparkles } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Navigate, Link } from 'react-router-dom';
 import { toast } from 'sonner';
+import { generateAIQuestions } from '../lib/gemini';
 
 export default function AdminDashboard() {
   const { user, loading } = useAppAuth();
@@ -35,6 +36,32 @@ export default function AdminDashboard() {
     setNewExamQuestions(prev => prev.filter(q => q.id !== id));
   const updateQuestion = (id: number, field: string, value: string) =>
     setNewExamQuestions(prev => prev.map(q => q.id === id ? { ...q, [field]: value } : q));
+
+  // AI Generator State
+  const [aiTopic, setAiTopic] = useState('');
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+
+  const handleGenerateAI = async () => {
+    if (!aiTopic.trim()) {
+      toast.error('Please enter a topic first');
+      return;
+    }
+    setIsGeneratingAI(true);
+    try {
+      const questions = await generateAIQuestions(aiTopic);
+      const formatted = questions.map((q, i) => ({
+        id: Date.now() + i,
+        ...q
+      }));
+      setNewExamQuestions(prev => [...prev, ...formatted]);
+      toast.success(`Successfully generated ${questions.length} questions!`);
+      setAiTopic('');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to generate questions');
+    } finally {
+      setIsGeneratingAI(false);
+    }
+  };
 
   // Submissions Filter
   const [submissionSearch, setSubmissionSearch] = useState('');
@@ -252,6 +279,39 @@ export default function AdminDashboard() {
                   <label className="block text-xs font-medium text-white/50 mb-1.5">Time</label>
                   <input type="time" value={newExamTime} onChange={e => setNewExamTime(e.target.value)}
                     className="w-full bg-[#111115] border border-white/10 rounded-lg py-2 px-3 text-sm text-white outline-none focus:border-indigo-500/50 transition-colors [color-scheme:dark]" />
+                </div>
+              </div>
+
+              {/* AI Generator Panel */}
+              <div className="border-t border-white/5 pt-5 mb-5">
+                <div className="bg-indigo-500/5 border border-indigo-500/10 rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <BrainCircuit className="w-4 h-4 text-indigo-400" />
+                    <span className="text-sm font-medium text-indigo-200">AI Question Assistant</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <input 
+                      type="text" 
+                      value={aiTopic}
+                      onChange={e => setAiTopic(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && handleGenerateAI()}
+                      placeholder="Enter topic (e.g. JavaScript Closures, World History...)"
+                      className="flex-1 bg-[#050505] border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-indigo-500/50 transition-colors"
+                    />
+                    <button 
+                      onClick={handleGenerateAI}
+                      disabled={isGeneratingAI}
+                      className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-all shadow-[0_0_15px_rgba(99,102,241,0.2)]"
+                    >
+                      {isGeneratingAI ? (
+                        <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                      ) : (
+                        <Sparkles className="w-4 h-4" />
+                      )}
+                      Generate
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-white/30 mt-2">Gemini AI will generate a mix of MCQ and Essay questions based on your topic.</p>
                 </div>
               </div>
 

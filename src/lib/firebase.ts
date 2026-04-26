@@ -1,8 +1,9 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
-import { getFirestore, doc, getDoc, setDoc, updateDoc, serverTimestamp, onSnapshot, collection, query, getDocs, addDoc, deleteDoc, Timestamp } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, setDoc, updateDoc, serverTimestamp, onSnapshot, collection, query, where, getDocs, addDoc, deleteDoc, Timestamp } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
@@ -123,12 +124,13 @@ export const subscribeToExams = (callback: (exams: any[]) => void) => {
   });
 };
 
-export const createExam = async (name: string, date: string, time: string, createdBy: string) => {
+export const createExam = async (name: string, date: string, time: string, createdBy: string, questions: any[] = []) => {
   await addDoc(collection(db, 'exams'), {
     name,
     date,
     time,
     createdBy,
+    questions,
     createdAt: serverTimestamp()
   });
 };
@@ -137,22 +139,37 @@ export const deleteExam = async (examId: string) => {
   await deleteDoc(doc(db, 'exams', examId));
 };
 
+export const getExamById = async (examId: string): Promise<any | null> => {
+  const docRef = doc(db, 'exams', examId);
+  const snap = await getDoc(docRef);
+  if (snap.exists()) return { id: snap.id, ...snap.data() } as any;
+  return null;
+};
+
 // Submission & Report Helpers
 export const submitExam = async (examId: string, studentId: string, studentName: string, studentEmail: string, answers: any, incidents: any[], trustScore: number) => {
   try {
-    const docRef = await addDoc(collection(db, 'submissions'), {
-      examId,
-      studentId,
-      studentName,
-      studentEmail,
-      answers,
-      incidents,
-      trustScore,
+    const payload = {
+      examId: examId || 'unknown_exam',
+      studentId: studentId || '',
+      studentName: studentName || 'Student',
+      studentEmail: studentEmail || '',
+      answers: answers || {},
+      incidents: incidents || [],
+      trustScore: typeof trustScore === 'number' ? trustScore : 100,
       submittedAt: serverTimestamp(),
       status: 'pending_review'
-    });
+    };
+    
+    // Explicitly deep-clone answers/incidents to strip any hidden undefined values inside arrays/objects
+    const cleanAnswers = JSON.parse(JSON.stringify(payload.answers));
+    const cleanIncidents = JSON.parse(JSON.stringify(payload.incidents));
+    payload.answers = cleanAnswers;
+    payload.incidents = cleanIncidents;
+
+    const docRef = await addDoc(collection(db, 'submissions'), payload);
     return docRef.id;
-  } catch (err) {
+  } catch (err: any) {
     console.error("Failed to submit exam:", err);
     throw err;
   }
@@ -168,8 +185,21 @@ export const subscribeToSubmissions = (callback: (submissions: any[]) => void) =
     // Sort by most recent first
     submissions.sort((a: any, b: any) => (b.submittedAt?.toMillis() || 0) - (a.submittedAt?.toMillis() || 0));
     callback(submissions);
-  }, (error) => {
-    console.error("Error fetching submissions:", error);
+  }, (err) => {
+    console.error('subscribeToSubmissions error:', err);
+    toast.error('Could not load submissions — check Firestore rules. (' + err.code + ')');
+  });
+};
+
+export const subscribeToStudentSubmissions = (studentId: string, callback: (submissions: any[]) => void) => {
+  const q = query(collection(db, 'submissions'), where('studentId', '==', studentId));
+  return onSnapshot(q, (snapshot) => {
+    const submissions = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    submissions.sort((a: any, b: any) => (b.submittedAt?.toMillis() || 0) - (a.submittedAt?.toMillis() || 0));
+    callback(submissions);
+  }, (err) => {
+    console.error('subscribeToStudentSubmissions error:', err);
+    toast.error('Could not load your history — check Firestore rules. (' + err.code + ')');
   });
 };
 

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAppAuth, logout, setUserRole, subscribeToExams, createExam, deleteExam, subscribeToSettings, updateSettings, subscribeToSubmissions } from '../lib/firebase';
-import { ShieldCheck, LogOut, FileCheck2, Users, Settings, Save, RotateCcw, Calendar, Clock, Plus, Trash2 } from 'lucide-react';
+import { ShieldCheck, LogOut, FileCheck2, Users, Settings, Save, RotateCcw, Calendar, Clock, Plus, Trash2, Search, X, AlignLeft, ListChecks, SortDesc } from 'lucide-react';
 import { motion } from 'motion/react';
 import { Navigate, Link } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -21,6 +21,21 @@ export default function AdminDashboard() {
   const [newExamDate, setNewExamDate] = useState('');
   const [newExamTime, setNewExamTime] = useState('');
   const [submissions, setSubmissions] = useState<any[]>([]);
+
+  // Question Builder
+  type QType = { id: number; text: string; type: 'textarea' | 'mcq'; options: string };
+  const [newExamQuestions, setNewExamQuestions] = useState<QType[]>([]);
+  const addQuestion = (type: 'textarea' | 'mcq') =>
+    setNewExamQuestions(prev => [...prev, { id: Date.now(), text: '', type, options: '' }]);
+  const removeQuestion = (id: number) =>
+    setNewExamQuestions(prev => prev.filter(q => q.id !== id));
+  const updateQuestion = (id: number, field: string, value: string) =>
+    setNewExamQuestions(prev => prev.map(q => q.id === id ? { ...q, [field]: value } : q));
+
+  // Submissions Filter
+  const [submissionSearch, setSubmissionSearch] = useState('');
+  const [submissionFilter, setSubmissionFilter] = useState<'all' | 'flagged' | 'clean'>('all');
+  const [submissionSort, setSubmissionSort] = useState<'newest' | 'mostFlags'>('newest');
 
   useEffect(() => {
     const unsubExams = subscribeToExams((fetchedExams) => {
@@ -80,23 +95,46 @@ export default function AdminDashboard() {
 
   const handleSaveExam = async () => {
     if (!newExamName || !newExamDate || !newExamTime) {
-      toast.error("Please fill in all fields");
+      toast.error('Please fill in all fields');
       return;
     }
-    
     try {
-      // Create exam in Firestore
-      await createExam(newExamName, newExamDate, newExamTime, user!.uid);
-      
+      const questions = newExamQuestions
+        .filter(q => q.text.trim())
+        .map((q, i) => {
+          const base = { id: i + 1, text: q.text.trim(), type: q.type };
+          if (q.type === 'mcq') {
+            return { ...base, options: q.options.split(',').map(o => o.trim()).filter(Boolean) };
+          }
+          return base; // essay — no options field at all
+        });
+      await createExam(newExamName, newExamDate, newExamTime, user!.uid, questions);
       setShowNewExamForm(false);
       setNewExamName('');
       setNewExamDate('');
       setNewExamTime('');
-      toast.success('Exam scheduled in database!');
+      setNewExamQuestions([]);
+      toast.success(`Exam scheduled with ${questions.length} question(s)!`);
     } catch (err: any) {
-      toast.error("Failed to create exam: " + err.message);
+      toast.error('Failed to create exam: ' + err.message);
     }
   };
+
+  const filteredSubmissions = submissions
+    .filter(s => {
+      const matchSearch = !submissionSearch ||
+        s.studentName?.toLowerCase().includes(submissionSearch.toLowerCase()) ||
+        s.studentEmail?.toLowerCase().includes(submissionSearch.toLowerCase());
+      const matchFilter =
+        submissionFilter === 'flagged' ? (s.incidents?.length || 0) > 0 :
+        submissionFilter === 'clean'   ? (s.incidents?.length || 0) === 0 : true;
+      return matchSearch && matchFilter;
+    })
+    .sort((a, b) =>
+      submissionSort === 'mostFlags'
+        ? (b.incidents?.length || 0) - (a.incidents?.length || 0)
+        : (b.submittedAt?.toMillis() || 0) - (a.submittedAt?.toMillis() || 0)
+    );
 
   const handleDeleteExam = async (id: string) => {
     if (confirm("Are you sure you want to delete this exam?")) {
@@ -184,52 +222,75 @@ export default function AdminDashboard() {
           </div>
 
           {showNewExamForm ? (
-            <div className="bg-white/5 border border-white/10 rounded-xl p-5 mb-2 relative">
-               <h3 className="text-sm font-medium mb-4 text-white/70">Schedule New Exam</h3>
-               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                 <div>
-                   <label className="block text-xs font-medium text-white/50 mb-1.5">Exam Name</label>
-                   <input 
-                     type="text" 
-                     value={newExamName}
-                     onChange={(e) => setNewExamName(e.target.value)}
-                     placeholder="e.g. History 101 Midterm"
-                     className="w-full bg-[#111115] border border-white/10 rounded-lg py-2 px-3 text-sm text-white outline-none focus:border-indigo-500/50 transition-colors"
-                   />
-                 </div>
-                 <div>
-                   <label className="block text-xs font-medium text-white/50 mb-1.5">Date</label>
-                   <input 
-                     type="date" 
-                     value={newExamDate}
-                     onChange={(e) => setNewExamDate(e.target.value)}
-                     className="w-full bg-[#111115] border border-white/10 rounded-lg py-2 px-3 text-sm text-white outline-none focus:border-indigo-500/50 transition-colors [color-scheme:dark]"
-                   />
-                 </div>
-                 <div>
-                   <label className="block text-xs font-medium text-white/50 mb-1.5">Time</label>
-                   <input 
-                     type="time" 
-                     value={newExamTime}
-                     onChange={(e) => setNewExamTime(e.target.value)}
-                     className="w-full bg-[#111115] border border-white/10 rounded-lg py-2 px-3 text-sm text-white outline-none focus:border-indigo-500/50 transition-colors [color-scheme:dark]"
-                   />
-                 </div>
-               </div>
-               <div className="flex justify-end gap-3">
-                 <button 
-                   onClick={() => setShowNewExamForm(false)}
-                   className="px-4 py-2 text-sm text-white/60 hover:text-white transition-colors"
-                 >
-                   Cancel
-                 </button>
-                 <button 
-                   onClick={handleSaveExam}
-                   className="px-4 py-2 text-sm bg-white text-black font-medium rounded-lg hover:bg-white/90 transition-colors"
-                 >
-                   Save Exam
-                 </button>
-               </div>
+            <div className="bg-white/5 border border-white/10 rounded-xl p-5 mb-2">
+              <h3 className="text-sm font-medium mb-4 text-white/70">Schedule New Exam</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div>
+                  <label className="block text-xs font-medium text-white/50 mb-1.5">Exam Name</label>
+                  <input type="text" value={newExamName} onChange={e => setNewExamName(e.target.value)}
+                    placeholder="e.g. History 101 Midterm"
+                    className="w-full bg-[#111115] border border-white/10 rounded-lg py-2 px-3 text-sm text-white outline-none focus:border-indigo-500/50 transition-colors" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-white/50 mb-1.5">Date</label>
+                  <input type="date" value={newExamDate} onChange={e => setNewExamDate(e.target.value)}
+                    className="w-full bg-[#111115] border border-white/10 rounded-lg py-2 px-3 text-sm text-white outline-none focus:border-indigo-500/50 transition-colors [color-scheme:dark]" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-white/50 mb-1.5">Time</label>
+                  <input type="time" value={newExamTime} onChange={e => setNewExamTime(e.target.value)}
+                    className="w-full bg-[#111115] border border-white/10 rounded-lg py-2 px-3 text-sm text-white outline-none focus:border-indigo-500/50 transition-colors [color-scheme:dark]" />
+                </div>
+              </div>
+
+              {/* Question Builder */}
+              <div className="border-t border-white/5 pt-5">
+                <div className="flex items-center justify-between mb-3">
+                  <label className="text-sm font-medium text-white/70">Questions <span className="text-white/30">({newExamQuestions.length})</span></label>
+                  <div className="flex gap-2">
+                    <button onClick={() => addQuestion('textarea')}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-white/60 transition-colors">
+                      <AlignLeft className="w-3.5 h-3.5" /> Essay
+                    </button>
+                    <button onClick={() => addQuestion('mcq')}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-white/60 transition-colors">
+                      <ListChecks className="w-3.5 h-3.5" /> MCQ
+                    </button>
+                  </div>
+                </div>
+                <div className="space-y-3 mb-4">
+                  {newExamQuestions.length === 0 && (
+                    <div className="text-center py-5 border border-dashed border-white/10 rounded-xl text-xs text-white/30">
+                      No questions yet — click Essay or MCQ to add one.
+                    </div>
+                  )}
+                  {newExamQuestions.map((q, i) => (
+                    <div key={q.id} className="bg-[#111115] border border-white/10 rounded-xl p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs text-white/40 bg-white/5 px-2 py-1 rounded">
+                          Q{i + 1} · {q.type === 'mcq' ? 'Multiple Choice' : 'Essay'}
+                        </span>
+                        <button onClick={() => removeQuestion(q.id)} className="text-white/30 hover:text-red-400 transition-colors"><X className="w-4 h-4" /></button>
+                      </div>
+                      <textarea rows={2} value={q.text} onChange={e => updateQuestion(q.id, 'text', e.target.value)}
+                        placeholder="Question text..."
+                        className="w-full bg-transparent text-sm text-white/80 outline-none resize-none placeholder:text-white/20 mb-2" />
+                      {q.type === 'mcq' && (
+                        <input type="text" value={q.options} onChange={e => updateQuestion(q.id, 'options', e.target.value)}
+                          placeholder="Options (comma-separated): A, B, C, D"
+                          className="w-full bg-[#050505] border border-white/5 rounded-lg px-3 py-2 text-xs text-white/70 outline-none focus:border-indigo-500/30" />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-white/5">
+                <button onClick={() => { setShowNewExamForm(false); setNewExamQuestions([]); }}
+                  className="px-4 py-2 text-sm text-white/60 hover:text-white transition-colors">Cancel</button>
+                <button onClick={handleSaveExam}
+                  className="px-4 py-2 text-sm bg-white text-black font-medium rounded-lg hover:bg-white/90 transition-colors">Save Exam</button>
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -267,35 +328,57 @@ export default function AdminDashboard() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <div className="bg-[#0A0A0C] border border-white/10 rounded-2xl p-6 flex flex-col">
-             <h2 className="text-lg font-medium mb-4">Recent Submissions & Alerts</h2>
-             <div className="flex flex-col gap-3 flex-1 overflow-y-auto max-h-[400px] pr-2">
-                {submissions.length > 0 ? submissions.map((sub: any) => {
-                  const hasFlags = sub.incidents && sub.incidents.length > 0;
-                  return (
-                    <div key={sub.id} className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5 hover:border-white/20 transition-colors">
-                      <div className="flex gap-4 items-center">
-                        <div className={`w-2 h-2 rounded-full ${hasFlags ? 'bg-red-500 animate-pulse' : 'bg-green-500'}`} />
-                        <div>
-                          <div className="text-sm font-medium">
-                            {hasFlags ? `${sub.incidents.length} Flags Detected` : 'Clean Session'}
-                          </div>
-                          <div className="text-xs text-white/50">
-                            Student: {sub.studentName} • {sub.examId} • Trust: {sub.trustScore}%
-                          </div>
-                        </div>
+            <h2 className="text-lg font-medium mb-4">Recent Submissions & Alerts</h2>
+
+            {/* Search + Filter bar */}
+            <div className="flex flex-col sm:flex-row gap-3 mb-4">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+                <input value={submissionSearch} onChange={e => setSubmissionSearch(e.target.value)}
+                  placeholder="Search by name or email..."
+                  className="w-full bg-white/5 border border-white/10 rounded-lg py-2 pl-9 pr-3 text-sm text-white outline-none focus:border-white/20 transition-colors" />
+              </div>
+              <div className="flex gap-1.5">
+                {(['all', 'flagged', 'clean'] as const).map(f => (
+                  <button key={f} onClick={() => setSubmissionFilter(f)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-colors ${
+                      submissionFilter === f ? 'bg-indigo-600 text-white' : 'bg-white/5 text-white/50 hover:bg-white/10'
+                    }`}>{f}</button>
+                ))}
+                <button onClick={() => setSubmissionSort(s => s === 'newest' ? 'mostFlags' : 'newest')}
+                  title={submissionSort === 'newest' ? 'Sort: Newest' : 'Sort: Most Flags'}
+                  className="px-3 py-1.5 rounded-lg text-xs bg-white/5 text-white/50 hover:bg-white/10 transition-colors flex items-center gap-1.5">
+                  <SortDesc className="w-3.5 h-3.5" />
+                  {submissionSort === 'newest' ? 'Newest' : 'Most Flags'}
+                </button>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3 flex-1 overflow-y-auto max-h-[360px] pr-1">
+              {filteredSubmissions.length > 0 ? filteredSubmissions.map((sub: any) => {
+                const flagCount = sub.incidents?.length || 0;
+                const hasFlags = flagCount > 0;
+                return (
+                  <div key={sub.id} className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5 hover:border-white/20 transition-colors">
+                    <div className="flex gap-3 items-center min-w-0">
+                      <div className={`w-2 h-2 rounded-full shrink-0 ${hasFlags ? 'bg-red-500 animate-pulse' : 'bg-green-500'}`} />
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium">{hasFlags ? `${flagCount} Flag${flagCount > 1 ? 's' : ''}` : 'Clean Session'}</div>
+                        <div className="text-xs text-white/50 truncate">{sub.studentName} · Trust: {sub.trustScore}%</div>
                       </div>
-                      <Link 
-                        to={`/admin/report/${sub.id}`}
-                        className="text-xs px-3 py-1.5 bg-white/10 rounded-md hover:bg-white/20 transition-colors"
-                      >
-                        Review Report
-                      </Link>
                     </div>
-                  );
-                }) : (
-                  <div className="text-sm text-white/40 text-center py-8">No submissions yet.</div>
-                )}
-             </div>
+                    <Link to={`/admin/report/${sub.id}`}
+                      className="text-xs px-3 py-1.5 bg-white/10 rounded-md hover:bg-white/20 transition-colors shrink-0 ml-3">
+                      Review
+                    </Link>
+                  </div>
+                );
+              }) : (
+                <div className="text-sm text-white/40 text-center py-8">
+                  {submissions.length === 0 ? 'No submissions yet.' : 'No results match your filter.'}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="bg-[#0A0A0C] border border-white/10 rounded-2xl p-6">

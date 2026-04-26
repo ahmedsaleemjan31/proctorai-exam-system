@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, SyntheticEvent } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useAppAuth, submitExam } from '../lib/firebase';
+import { useAppAuth, submitExam, getExamById } from '../lib/firebase';
 import { motion } from 'motion/react';
 import { Clock, AlertTriangle, ShieldCheck, Video, Send, ShieldAlert } from 'lucide-react';
 import { toast } from 'sonner';
@@ -11,15 +11,14 @@ export default function ExamRoom() {
   const navigate = useNavigate();
   const { user, loading } = useAppAuth();
   
-  const [timeLeft, setTimeLeft] = useState(120 * 60); // 120 minutes
+  const [timeLeft, setTimeLeft] = useState(120 * 60);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  
   const [answers, setAnswers] = useState<Record<number, string>>({});
-  
   const [incidents, setIncidents] = useState<{time: string, type: string}[]>([]);
   const [isModelLoaded, setIsModelLoaded] = useState(false);
   const [aiWarning, setAiWarning] = useState<string | null>(null);
+  const [examData, setExamData] = useState<any>(null);
 
   // Browser Lockdown
   useEffect(() => {
@@ -98,25 +97,33 @@ export default function ExamRoom() {
     return () => clearInterval(interval);
   }, [isModelLoaded, stream]);
 
-  // Dummy questions for demonstration
-  const questions = [
-    {
-      id: 1,
-      text: "Explain the main differences between React's Virtual DOM and the real DOM.",
-      type: "textarea"
-    },
-    {
-      id: 2,
-      text: "Which of the following hooks is used to manage side effects in functional components?",
-      type: "mcq",
-      options: ["useState", "useEffect", "useMemo", "useContext"]
-    },
-    {
-      id: 3,
-      text: "Describe how closure works in JavaScript and provide a practical use case.",
-      type: "textarea"
-    }
+  // Fetch exam data + validate time window
+  useEffect(() => {
+    if (!id) return;
+    getExamById(id).then(exam => {
+      if (!exam) { toast.error('Exam not found.'); navigate('/student'); return; }
+      setExamData(exam);
+      // Time-gate check
+      const dt = new Date(`${exam.date}T${exam.time}`);
+      const diffMins = (dt.getTime() - Date.now()) / 60_000;
+      if (diffMins > 15) {
+        toast.error('This exam has not started yet.');
+        navigate('/student');
+      } else if (diffMins < -240) {
+        toast.error('This exam session has expired.');
+        navigate('/student');
+      }
+    }).catch(() => { toast.error('Failed to load exam.'); navigate('/student'); });
+  }, [id]);
+
+  // Fallback dummy questions (used only if admin added none)
+  const FALLBACK_QUESTIONS = [
+    { id: 1, text: "Explain the main differences between React's Virtual DOM and the real DOM.", type: "textarea" },
+    { id: 2, text: "Which of the following hooks is used to manage side effects in functional components?", type: "mcq", options: ["useState", "useEffect", "useMemo", "useContext"] },
+    { id: 3, text: "Describe how closure works in JavaScript and provide a practical use case.", type: "textarea" }
   ];
+
+  const questions: any[] = (examData?.questions?.length > 0) ? examData.questions : FALLBACK_QUESTIONS;
 
   // Request camera access on mount
   useEffect(() => {
@@ -250,7 +257,7 @@ export default function ExamRoom() {
       {/* Main Content */}
       <main className="flex-1 max-w-4xl mx-auto w-full px-6 py-12 pb-32">
         <div className="mb-10">
-          <h1 className="text-3xl font-display font-bold mb-2">Midterm Examination</h1>
+          <h1 className="text-3xl font-display font-bold mb-2">{examData?.name || 'Exam'}</h1>
           <p className="text-white/50 text-sm">Please answer all questions below. Your activity is being monitored.</p>
         </div>
 

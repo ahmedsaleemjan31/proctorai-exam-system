@@ -295,7 +295,12 @@ export default function LandingPage() {
                <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="w-full sm:w-auto bg-indigo-600 text-white px-8 py-4 rounded-full font-bold hover:bg-indigo-500 transition-all shadow-[0_0_40px_rgba(99,102,241,0.4)] hover:shadow-[0_0_60px_rgba(99,102,241,0.6)]">
                  Start Your Free Trial
                </motion.button>
-               <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="w-full sm:w-auto bg-white/5 border border-white/10 hover:bg-white/10 px-8 py-4 rounded-full font-medium transition-all">
+               <motion.button 
+                 whileHover={{ scale: 1.05 }} 
+                 whileTap={{ scale: 0.95 }} 
+                 onClick={() => window.open('https://wa.me/923218528796', '_blank')}
+                 className="w-full sm:w-auto bg-white/5 border border-white/10 hover:bg-white/10 px-8 py-4 rounded-full font-medium transition-all cursor-pointer"
+               >
                  Contact Sales
                </motion.button>
             </div>

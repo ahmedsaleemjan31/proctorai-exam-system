@@ -13,12 +13,12 @@ export default function ExamRoom() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user, loading } = useAppAuth();
-  
+
   const [timeLeft, setTimeLeft] = useState(120 * 60);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [answers, setAnswers] = useState<Record<number, string>>({});
-  const [incidents, setIncidents] = useState<{time: string, type: string}[]>([]);
+  const [incidents, setIncidents] = useState<{ time: string, type: string }[]>([]);
   const [isModelLoaded, setIsModelLoaded] = useState(false);
   const [aiWarning, setAiWarning] = useState<string | null>(null);
   const [examData, setExamData] = useState<any>(null);
@@ -40,7 +40,7 @@ export default function ExamRoom() {
   useEffect(() => {
     const requestFS = () => {
       if (document.documentElement.requestFullscreen) {
-        document.documentElement.requestFullscreen().catch(() => {});
+        document.documentElement.requestFullscreen().catch(() => { });
       }
     };
     // Attempt fullscreen immediately
@@ -67,7 +67,7 @@ export default function ExamRoom() {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
       if (document.fullscreenElement) {
-        document.exitFullscreen().catch(() => {});
+        document.exitFullscreen().catch(() => { });
       }
     };
   }, []);
@@ -90,7 +90,7 @@ export default function ExamRoom() {
       try {
         // Ensure TensorFlow is ready
         await tf.ready();
-        
+
         await Promise.all([
           faceapi.nets.tinyFaceDetector.loadFromUri('https://vladmandic.github.io/face-api/model/'),
           faceapi.nets.faceLandmark68Net.loadFromUri('https://vladmandic.github.io/face-api/model/'),
@@ -112,23 +112,23 @@ export default function ExamRoom() {
     if (!isModelLoaded || !stream || !videoRef.current || verificationStage !== 'completed' || isSubmitting) return;
 
     const video = videoRef.current;
-    
+
     // Warm-up period to avoid false positives at start
     const startTime = Date.now();
-    
+
     const runDetections = async () => {
       if (video.paused || video.ended || !stream.active || (Date.now() - startTime < 3000)) return;
       try {
         // 1. Face & Gaze Detection
         const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 160 })).withFaceLandmarks();
-        
+
         let newWarning: string | null = null;
         const now = Date.now();
 
         if (detections.length === 0) {
           faceMissingCountRef.current++;
           newWarning = "Face Not Detected";
-          
+
           if (faceMissingCountRef.current >= 2 && now - (lastIncidentTimeRef.current['face_missing'] || 0) > 20000) {
             setIncidents(prev => [...prev, { time: new Date().toLocaleTimeString(), type: "Face Not Detected" }]);
             lastIncidentTimeRef.current['face_missing'] = now;
@@ -167,7 +167,7 @@ export default function ExamRoom() {
       }
     };
 
-    const interval = setInterval(runDetections, 4000); 
+    const interval = setInterval(runDetections, 4000);
     return () => clearInterval(interval);
   }, [isModelLoaded, stream, verificationStage, objectModel, aiWarning, isSubmitting]);
 
@@ -183,7 +183,7 @@ export default function ExamRoom() {
     const analyser = context.createAnalyser();
     analyser.fftSize = 256;
     source.connect(analyser);
-    
+
     analyserRef.current = analyser;
     audioContextRef.current = context;
 
@@ -196,7 +196,7 @@ export default function ExamRoom() {
       let sum = 0;
       for (let i = 0; i < bufferLength; i++) sum += dataArray[i];
       const average = sum / bufferLength;
-      
+
       // Throttle visual update to prevent excessive re-renders
       if (Math.abs(audioLevelRef.current - average) > 2) {
         audioLevelRef.current = average;
@@ -206,7 +206,7 @@ export default function ExamRoom() {
       if (average > 50) { // Threshold for suspicious noise
         const now = Date.now();
         const lastNoise = lastIncidentTimeRef.current['noise'] || 0;
-        
+
         if (now - lastNoise > 10000) { // 10 second cooldown for noise incidents
           setIncidents(prev => [...prev, { time: new Date().toLocaleTimeString(), type: "Suspicious Noise Detected" }]);
           toast.warning("Loud noise detected! Please remain quiet.", { duration: 2000 });
@@ -256,13 +256,13 @@ export default function ExamRoom() {
   // Request camera access on mount
   useEffect(() => {
     let activeStream: MediaStream | null = null;
-    
+
     const initCamera = async () => {
       try {
         const mediaStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         setStream(mediaStream);
         activeStream = mediaStream;
-        
+
         if (videoRef.current) {
           videoRef.current.srcObject = mediaStream;
         }
@@ -270,9 +270,9 @@ export default function ExamRoom() {
         toast.error("Camera access required for this exam.");
       }
     };
-    
+
     initCamera();
-    
+
     return () => {
       if (activeStream) {
         activeStream.getTracks().forEach(track => track.stop());
@@ -307,7 +307,7 @@ export default function ExamRoom() {
   const handleSubmit = async () => {
     if (!user || isSubmitting) return;
     setIsSubmitting(true);
-    
+
     if (stream) {
       stream.getTracks().forEach(track => track.stop());
     }
@@ -316,31 +316,31 @@ export default function ExamRoom() {
     if (verificationPhoto) {
       finalIncidents.push({ time: "Pre-Exam", type: `Identity Verified (Photo Captured)` });
     }
-    
+
     try {
       const trustScore = Math.max(0, 100 - incidents.length * 15);
       const submissionId = await submitExam(
-        id || 'unknown_exam', 
-        user.uid, 
-        user.name, 
-        user.email, 
-        answers, 
-        finalIncidents, 
+        id || 'unknown_exam',
+        user.uid,
+        user.name,
+        user.email,
+        answers,
+        finalIncidents,
         trustScore
       );
-      
+
       // Store verification photo in local storage for the report (simulating DB storage for now)
       if (verificationPhoto) {
         localStorage.setItem(`verification_${submissionId}`, verificationPhoto);
       }
-      
+
       // Pass the incidents securely to the results page
       localStorage.setItem('examIncidents', JSON.stringify(finalIncidents));
       navigate(`/results/${id}`, { state: { incidentCount: incidents.length } });
     } catch (err: any) {
       console.error(err);
       toast.warning("Cloud save failed (check Firestore rules). Saving locally instead.");
-      
+
       // Still navigate so they aren't stuck!
       localStorage.setItem('examIncidents', JSON.stringify(incidents));
       navigate(`/results/${id}`, { state: { incidentCount: incidents.length } });
@@ -359,7 +359,7 @@ export default function ExamRoom() {
   }
 
   return (
-    <div 
+    <div
       className="min-h-screen bg-[#050505] text-[#FAFAFA] font-sans relative overflow-hidden flex flex-col select-none"
       onCopy={handlePreventCheating}
       onPaste={handlePreventCheating}
@@ -368,13 +368,13 @@ export default function ExamRoom() {
       {/* Verification Overlay */}
       {verificationStage !== 'completed' && (
         <div className="fixed inset-0 z-[100] bg-[#050505] flex items-center justify-center p-6">
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             className="max-w-2xl w-full bg-[#0A0A0C] border border-white/10 rounded-3xl p-8 shadow-2xl relative overflow-hidden"
           >
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500 animate-gradient-x" />
-            
+
             <div className="text-center mb-8">
               <div className="w-16 h-16 bg-indigo-500/10 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-indigo-500/20">
                 <Shield className="w-8 h-8 text-indigo-400" />
@@ -405,7 +405,7 @@ export default function ExamRoom() {
                       {isModelLoaded ? 'AI Models ready' : modelError ? <span className="text-red-400">{modelError}</span> : 'Loading security models...'}
                     </div>
                     {modelError && (
-                      <button 
+                      <button
                         onClick={() => { setIsModelLoaded(true); setModelError(null); }}
                         className="text-[10px] text-indigo-400 hover:underline mt-1 block"
                       >
@@ -430,12 +430,12 @@ export default function ExamRoom() {
                 <div className="aspect-square bg-black rounded-2xl border border-white/10 overflow-hidden relative">
                   {stream ? (
                     <>
-                      <video 
-                        autoPlay 
-                        playsInline 
-                        muted 
+                      <video
+                        autoPlay
+                        playsInline
+                        muted
                         ref={(v) => { if (v) v.srcObject = stream; }}
-                        className="w-full h-full object-cover transform -scale-x-100" 
+                        className="w-full h-full object-cover transform -scale-x-100"
                       />
                       {!verificationPhoto && (
                         <div className="absolute inset-0 border-2 border-dashed border-indigo-500/30 rounded-2xl m-4 pointer-events-none" />
@@ -454,8 +454,8 @@ export default function ExamRoom() {
                     </div>
                   )}
                 </div>
-                
-                <button 
+
+                <button
                   onClick={() => {
                     const video = document.querySelector('video');
                     const canvas = document.createElement('canvas');
@@ -475,7 +475,7 @@ export default function ExamRoom() {
               </div>
             </div>
 
-            <button 
+            <button
               onClick={() => setVerificationStage('completed')}
               disabled={!verificationPhoto || !isModelLoaded}
               className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(99,102,241,0.4)]"
@@ -492,7 +492,7 @@ export default function ExamRoom() {
           <span className="font-display font-medium">ProctorAI Secure Exam</span>
           <span className="px-2 py-0.5 rounded text-xs bg-white/5 border border-white/10 text-white/50 ml-2">ID: {id}</span>
         </div>
-        
+
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-2 bg-white/5 px-4 py-1.5 rounded-full border border-white/10">
             <Clock className={`w-4 h-4 ${timeLeft < 300 ? 'text-red-400 animate-pulse' : 'text-white/40'}`} />
@@ -500,8 +500,8 @@ export default function ExamRoom() {
               {formatTime(timeLeft)}
             </span>
           </div>
-          
-          <button 
+
+          <button
             onClick={handleSubmit}
             disabled={isSubmitting}
             className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 transition-colors px-4 py-1.5 rounded-lg text-sm font-medium shadow-[0_0_15px_rgba(99,102,241,0.3)] disabled:opacity-50"
@@ -520,7 +520,7 @@ export default function ExamRoom() {
 
         <div className="space-y-8">
           {questions.map((q, index) => (
-            <motion.div 
+            <motion.div
               key={q.id}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -536,11 +536,11 @@ export default function ExamRoom() {
 
               <div className="pl-12">
                 {q.type === 'textarea' ? (
-                  <textarea 
+                  <textarea
                     className="w-full bg-[#050505] border border-white/10 rounded-xl p-4 text-white/80 placeholder:text-white/20 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all min-h-[150px] resize-y"
                     placeholder="Type your answer here..."
                     value={answers[q.id] || ""}
-                    onChange={(e) => setAnswers({...answers, [q.id]: e.target.value})}
+                    onChange={(e) => setAnswers({ ...answers, [q.id]: e.target.value })}
                   />
                 ) : (
                   <div className="space-y-3">
@@ -550,12 +550,12 @@ export default function ExamRoom() {
                           {answers[q.id] === opt && <div className="w-2.5 h-2.5 bg-indigo-400 rounded-full" />}
                         </div>
                         <span className="text-white/80">{opt}</span>
-                        <input 
-                          type="radio" 
-                          name={`q-${q.id}`} 
+                        <input
+                          type="radio"
+                          name={`q-${q.id}`}
                           value={opt}
                           checked={answers[q.id] === opt}
-                          onChange={() => setAnswers({...answers, [q.id]: opt})}
+                          onChange={() => setAnswers({ ...answers, [q.id]: opt })}
                           className="hidden"
                         />
                       </label>
@@ -577,12 +577,12 @@ export default function ExamRoom() {
           </div>
         ) : (
           <>
-            <video 
-              ref={videoRef} 
-              autoPlay 
-              playsInline 
-              muted 
-              className="w-full h-full object-cover transform -scale-x-100" 
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className="w-full h-full object-cover transform -scale-x-100"
             />
             <div className="absolute top-2 right-2 px-2 py-1 bg-green-500/80 backdrop-blur-md rounded flex items-center gap-1.5">
               <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
@@ -597,23 +597,23 @@ export default function ExamRoom() {
                 </span>
               </div>
             )}
-            
+
             {/* Loading AI State */}
             {!isModelLoaded && !aiWarning && (
-               <div className="absolute top-2 left-2 px-2 py-1 bg-indigo-500/80 backdrop-blur-md rounded flex items-center gap-1.5">
-                 <span className="text-[10px] font-bold text-white tracking-wider uppercase">Loading AI...</span>
-               </div>
+              <div className="absolute top-2 left-2 px-2 py-1 bg-indigo-500/80 backdrop-blur-md rounded flex items-center gap-1.5">
+                <span className="text-[10px] font-bold text-white tracking-wider uppercase">Loading AI...</span>
+              </div>
             )}
-            
+
             {/* Audio Indicator */}
             <div className="absolute bottom-2 left-2 flex items-center gap-1">
-               <Mic className={`w-3 h-3 ${audioLevel > 30 ? 'text-red-400' : 'text-white/50'}`} />
-               <div className="w-12 h-1 bg-white/10 rounded-full overflow-hidden">
-                 <div 
-                   className={`h-full transition-all duration-100 ${audioLevel > 30 ? 'bg-red-400' : 'bg-indigo-400'}`} 
-                   style={{ width: `${Math.min(100, audioLevel * 2)}%` }} 
-                 />
-               </div>
+              <Mic className={`w-3 h-3 ${audioLevel > 30 ? 'text-red-400' : 'text-white/50'}`} />
+              <div className="w-12 h-1 bg-white/10 rounded-full overflow-hidden">
+                <div
+                  className={`h-full transition-all duration-100 ${audioLevel > 30 ? 'bg-red-400' : 'bg-indigo-400'}`}
+                  style={{ width: `${Math.min(100, audioLevel * 2)}%` }}
+                />
+              </div>
             </div>
           </>
         )}

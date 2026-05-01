@@ -4,7 +4,6 @@ import base64
 import time
 import math
 
-# Robust MediaPipe import
 HAS_MEDIAPIPE = False
 try:
     import mediapipe as mp

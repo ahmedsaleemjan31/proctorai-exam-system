@@ -112,7 +112,7 @@ export default function InstructorDashboard() {
         isObjectEnabled,
         isAudioEnabled,
         isIdentityEnabled
-      });
+      }, user.uid);
       toast.success('Settings saved to database successfully!');
     } catch (err: any) {
       toast.error('Failed to save settings: ' + err.message);

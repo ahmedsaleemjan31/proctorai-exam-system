@@ -245,7 +245,11 @@ export default function ProctoringReport() {
                   </div>
                   {flag.image && (
                     <div className="ml-0 md:ml-0 mt-4 md:mt-0 shrink-0">
-                      <img src={flag.image} alt="Incident Evidence" className="h-40 w-64 rounded-xl border border-red-500/20 object-cover shadow-2xl transform -scale-x-100 transition-transform hover:scale-105" />
+                      <img 
+                        src={flag.image.startsWith('http') ? flag.image : `http://localhost:8000${flag.image}`} 
+                        alt="Evidence" 
+                        className="h-48 w-72 rounded-xl border border-white/10 object-cover shadow-2xl transition-all hover:scale-105" 
+                      />
                     </div>
                   )}
                   {flag.audio && (

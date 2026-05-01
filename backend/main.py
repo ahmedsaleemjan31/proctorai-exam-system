@@ -1,6 +1,7 @@
 import os
 import base64
 import uuid
+import time
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -8,10 +9,12 @@ from sqlalchemy.orm import Session
 from typing import List
 from . import models, schemas
 from .database import engine, get_db
+from .utils.ai_monitor import AIProctor
 
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
+proctor = AIProctor()
 
 app.add_middleware(
     CORSMiddleware,
@@ -254,4 +257,3 @@ def update_settings(sett_update: schemas.SettingsUpdate, user_id: str, db: Sessi
     _settings_cache["data"] = None 
     
     return sett
-

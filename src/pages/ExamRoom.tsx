@@ -532,7 +532,39 @@ export default function ExamRoom() {
             </div>
 
             <button
-              onClick={() => setVerificationStage('completed')}
+              onClick={async () => {
+                if (verificationPhoto) {
+                  // Log the safe identity check
+                  const safeIncident = {
+                    time: new Date().toLocaleTimeString(),
+                    type: "Identity Verified",
+                    image: verificationPhoto
+                  };
+                  
+                  // Add to local state
+                  setIncidents([safeIncident]);
+                  
+                  // Also upload to server immediately
+                  try {
+                    const res = await fetch('http://localhost:8000/upload_incident', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        image: verificationPhoto,
+                        type: "Identity Verified",
+                        time: safeIncident.time
+                      })
+                    });
+                    if (res.ok) {
+                      const data = await res.json();
+                      setIncidents([{ ...safeIncident, image: data.image_url }]);
+                    }
+                  } catch (e) {
+                    console.error("Verification upload failed", e);
+                  }
+                }
+                setVerificationStage('completed');
+              }}
               disabled={!verificationPhoto || !isModelLoaded}
               className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(99,102,241,0.4)]"
             >

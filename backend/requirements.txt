@@ -2,4 +2,8 @@ fastapi
 uvicorn
 sqlalchemy
 pydantic
+opencv-python
+mediapipe
+numpy
+python-multipart
 python-multipart

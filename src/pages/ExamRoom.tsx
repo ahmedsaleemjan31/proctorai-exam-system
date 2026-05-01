@@ -18,7 +18,7 @@ export default function ExamRoom() {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [answers, setAnswers] = useState<Record<number, string>>({});
-  const [incidents, setIncidents] = useState<{ time: string, type: string, image?: string }[]>([]);
+  const [incidents, setIncidents] = useState<{ time: string, type: string, image?: string, audio?: string }[]>([]);
   const [isModelLoaded, setIsModelLoaded] = useState(false);
   const [aiWarning, setAiWarning] = useState<string | null>(null);
   const [examData, setExamData] = useState<any>(null);
@@ -38,19 +38,21 @@ export default function ExamRoom() {
 
   const captureEvidence = () => {
     const video = videoRef.current;
-    if (!video || !stream) return undefined;
+    if (!video || !stream || video.paused || video.ended) return undefined;
     try {
       const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+      // Ensure canvas matches the actual video resolution
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
       const ctx = canvas.getContext('2d');
       if (ctx) {
-        ctx.drawImage(video, 0, 0);
-        // Compress the image slightly to save DB space
-        return canvas.toDataURL('image/jpeg', 0.5);
+        // Draw the current live frame
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        // Use JPEG for better compression/speed
+        return canvas.toDataURL('image/jpeg', 0.6);
       }
     } catch (e) {
-      console.error("Failed to capture evidence:", e);
+      console.error("Critical capture error:", e);
     }
     return undefined;
   };
@@ -221,20 +223,49 @@ export default function ExamRoom() {
       for (let i = 0; i < bufferLength; i++) sum += dataArray[i];
       const average = sum / bufferLength;
 
-      // Throttle visual update to prevent excessive re-renders
       if (Math.abs(audioLevelRef.current - average) > 2) {
         audioLevelRef.current = average;
         setAudioLevel(average);
       }
 
-      if (average > 50) { // Threshold for suspicious noise
+      if (average > 40) { // Lowered threshold slightly for better sensitivity
         const now = Date.now();
         const lastNoise = lastIncidentTimeRef.current['noise'] || 0;
 
-        if (now - lastNoise > 10000) { // 10 second cooldown for noise incidents
-          const evidence = captureEvidence();
-          setIncidents(prev => [...prev, { time: new Date().toLocaleTimeString(), type: "Suspicious Noise Detected", image: evidence }]);
-          toast.warning("Loud noise detected! Please remain quiet.", { duration: 2000 });
+        if (now - lastNoise > 8000) { 
+          const evidence = captureEvidence(); // Take screenshot IMMEDIATELY
+          const timestamp = new Date().toLocaleTimeString();
+          
+          // Isolate audio tracks for a cleaner recording
+          if (stream && stream.getAudioTracks().length > 0) {
+            const audioStream = new MediaStream(stream.getAudioTracks());
+            const recorder = new MediaRecorder(audioStream, { mimeType: 'audio/webm' });
+            const chunks: Blob[] = [];
+            
+            recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+            recorder.onstop = () => {
+              const blob = new Blob(chunks, { type: 'audio/webm' });
+              const reader = new FileReader();
+              reader.readAsDataURL(blob);
+              reader.onloadend = () => {
+                const base64Audio = reader.result as string;
+                setIncidents(prev => [...prev, { 
+                  time: timestamp, 
+                  type: "Suspicious Noise Detected", 
+                  image: evidence,
+                  audio: base64Audio 
+                }]);
+                console.log("Audio evidence saved to incidents.");
+              };
+            };
+            
+            recorder.start();
+            setTimeout(() => { if (recorder.state === 'recording') recorder.stop(); }, 3000);
+          } else {
+            setIncidents(prev => [...prev, { time: timestamp, type: "Suspicious Noise Detected", image: evidence }]);
+          }
+
+          toast.warning("Loud noise detected!", { duration: 2000 });
           lastIncidentTimeRef.current['noise'] = now;
         }
       }

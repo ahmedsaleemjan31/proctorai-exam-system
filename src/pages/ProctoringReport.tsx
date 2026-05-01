@@ -147,6 +147,14 @@ export default function ProctoringReport() {
                       <img src={flag.image} alt="Incident Evidence" className="h-32 rounded-lg border border-red-500/30 object-cover shadow-lg transform -scale-x-100" />
                     </div>
                   )}
+                  {flag.audio && (
+                    <div className="ml-0 md:ml-[5.5rem] mt-4 md:mt-0">
+                      <audio controls className="h-10 w-64 brightness-90 contrast-125">
+                        <source src={flag.audio} type="audio/webm" />
+                        Your browser does not support the audio element.
+                      </audio>
+                    </div>
+                  )}
                 </div>
               );
             })}

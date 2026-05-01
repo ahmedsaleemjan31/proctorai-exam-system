@@ -28,46 +28,49 @@ export function useAppAuth() {
 
   useEffect(() => {
     let unsubscribeSnapshot: (() => void) | undefined;
+    let intervalId: any;
 
-    const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        // Fetch user document from Firestore in real-time
-        const userDocRef = doc(db, 'users', firebaseUser.uid);
-        
-        unsubscribeSnapshot = onSnapshot(userDocRef, (userDoc) => {
-          if (userDoc.exists()) {
-            const data = userDoc.data();
-            setUser({
-              uid: firebaseUser.uid,
-              email: firebaseUser.email || '',
-              name: data.name || firebaseUser.displayName || 'User',
-              role: data.role as UserRole,
-            });
-          } else {
-            // User exists in Auth but not in Firestore (needs role assignment)
-            setUser({
-              uid: firebaseUser.uid,
-              email: firebaseUser.email || '',
-              name: firebaseUser.displayName || 'User',
-              role: null, // Indicates they haven't picked a role yet
-            });
+        // Fetch user from Python backend
+        const fetchUser = async () => {
+          try {
+            const res = await fetch(`http://localhost:8000/users/${firebaseUser.uid}`);
+            if (res.ok) {
+              const data = await res.json();
+              setUser({
+                uid: firebaseUser.uid,
+                email: firebaseUser.email || '',
+                name: data.name || firebaseUser.displayName || 'User',
+                role: data.role as UserRole,
+              });
+            } else {
+              setUser({
+                uid: firebaseUser.uid,
+                email: firebaseUser.email || '',
+                name: firebaseUser.displayName || 'User',
+                role: null,
+              });
+            }
+            setLoading(false);
+          } catch (err) {
+            console.error("Backend fetch error:", err);
+            setLoading(false);
           }
-          setLoading(false);
-        }, (err) => {
-          console.error("Firestore listener error:", err);
-          setLoading(false);
-        });
+        };
 
+        await fetchUser();
+        intervalId = setInterval(fetchUser, 5000); // poll for role changes
       } else {
         setUser(null);
         setLoading(false);
-        if (unsubscribeSnapshot) unsubscribeSnapshot();
+        if (intervalId) clearInterval(intervalId);
       }
     });
 
     return () => {
       unsubscribeAuth();
-      if (unsubscribeSnapshot) unsubscribeSnapshot();
+      if (intervalId) clearInterval(intervalId);
     };
   }, []);
 
@@ -86,18 +89,16 @@ export const loginWithGoogle = async () => {
 };
 
 // Set Role Helper (Called after new account creation)
-export const setUserRole = async (uid: string, email: string, name: string, role: 'admin' | 'student') => {
-  const userDocRef = doc(db, 'users', uid);
+export const setUserRole = async (uid: string, email: string, name: string, role: 'admin' | 'student' | 'instructor') => {
   try {
-    const snap = await getDoc(userDocRef);
-    if (snap.exists()) {
-      await updateDoc(userDocRef, { role });
+    const res = await fetch(`http://localhost:8000/users/${uid}`);
+    if (res.ok) {
+      await fetch(`http://localhost:8000/users/${uid}/role?role=${role}`, { method: 'PUT' });
     } else {
-      await setDoc(userDocRef, {
-        email,
-        name,
-        role,
-        createdAt: serverTimestamp(),
+      await fetch('http://localhost:8000/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: uid, email, name, role }),
       });
     }
   } catch (error) {
@@ -112,37 +113,46 @@ export const logout = async () => {
 
 // Exam Helpers
 export const subscribeToExams = (callback: (exams: any[]) => void) => {
-  const q = query(collection(db, 'exams'));
-  return onSnapshot(q, (snapshot) => {
-    const exams = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
-    callback(exams);
-  }, (error) => {
-    console.error("Error fetching exams:", error);
-  });
+  let isSubscribed = true;
+  const fetchExams = async () => {
+    try {
+      const res = await fetch('http://localhost:8000/exams');
+      if (res.ok && isSubscribed) {
+        const exams = await res.json();
+        callback(exams);
+      }
+    } catch (error) {
+      console.error("Error fetching exams:", error);
+    }
+  };
+  fetchExams();
+  const intervalId = setInterval(fetchExams, 3000);
+  return () => {
+    isSubscribed = false;
+    clearInterval(intervalId);
+  };
 };
 
 export const createExam = async (name: string, date: string, time: string, createdBy: string, questions: any[] = []) => {
-  await addDoc(collection(db, 'exams'), {
-    name,
-    date,
-    time,
-    createdBy,
-    questions,
-    createdAt: serverTimestamp()
+  const id = "exam_" + Date.now();
+  await fetch('http://localhost:8000/exams', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      id, name, date, time, instructor_id: createdBy, questions
+    }),
   });
 };
 
 export const deleteExam = async (examId: string) => {
-  await deleteDoc(doc(db, 'exams', examId));
+  await fetch(`http://localhost:8000/exams/${examId}`, { method: 'DELETE' });
 };
 
 export const getExamById = async (examId: string): Promise<any | null> => {
-  const docRef = doc(db, 'exams', examId);
-  const snap = await getDoc(docRef);
-  if (snap.exists()) return { id: snap.id, ...snap.data() } as any;
+  try {
+    const res = await fetch(`http://localhost:8000/exams/${examId}`);
+    if (res.ok) return await res.json();
+  } catch (e) {}
   return null;
 };
 
@@ -150,25 +160,23 @@ export const getExamById = async (examId: string): Promise<any | null> => {
 export const submitExam = async (examId: string, studentId: string, studentName: string, studentEmail: string, answers: any, incidents: any[], trustScore: number) => {
   try {
     const payload = {
-      examId: examId || 'unknown_exam',
-      studentId: studentId || '',
-      studentName: studentName || 'Student',
-      studentEmail: studentEmail || '',
+      id: "sub_" + Date.now(),
+      exam_id: examId || 'unknown_exam',
+      student_id: studentId || '',
+      student_name: studentName || 'Student',
+      student_email: studentEmail || '',
       answers: answers || {},
       incidents: incidents || [],
-      trustScore: typeof trustScore === 'number' ? trustScore : 100,
-      submittedAt: serverTimestamp(),
-      status: 'pending_review'
+      trust_score: typeof trustScore === 'number' ? trustScore : 100,
+      submitted_at: new Date().toISOString(),
     };
     
-    // Explicitly deep-clone answers/incidents to strip any hidden undefined values inside arrays/objects
-    const cleanAnswers = JSON.parse(JSON.stringify(payload.answers));
-    const cleanIncidents = JSON.parse(JSON.stringify(payload.incidents));
-    payload.answers = cleanAnswers;
-    payload.incidents = cleanIncidents;
-
-    const docRef = await addDoc(collection(db, 'submissions'), payload);
-    return docRef.id;
+    await fetch('http://localhost:8000/submissions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return payload.id;
   } catch (err: any) {
     console.error("Failed to submit exam:", err);
     throw err;
@@ -176,64 +184,84 @@ export const submitExam = async (examId: string, studentId: string, studentName:
 };
 
 export const subscribeToSubmissions = (callback: (submissions: any[]) => void) => {
-  const q = query(collection(db, 'submissions'));
-  return onSnapshot(q, (snapshot) => {
-    const submissions = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
-    // Sort by most recent first
-    submissions.sort((a: any, b: any) => (b.submittedAt?.toMillis() || 0) - (a.submittedAt?.toMillis() || 0));
-    callback(submissions);
-  }, (err) => {
-    console.error('subscribeToSubmissions error:', err);
-    toast.error('Could not load submissions — check Firestore rules. (' + err.code + ')');
-  });
+  let isSubscribed = true;
+  const fetchSubs = async () => {
+    try {
+      const res = await fetch('http://localhost:8000/submissions');
+      if (res.ok && isSubscribed) {
+        const subs = await res.json();
+        subs.sort((a: any, b: any) => new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime());
+        callback(subs);
+      }
+    } catch (error) {
+      console.error('subscribeToSubmissions error:', error);
+    }
+  };
+  fetchSubs();
+  const intervalId = setInterval(fetchSubs, 3000);
+  return () => {
+    isSubscribed = false;
+    clearInterval(intervalId);
+  };
 };
 
 export const subscribeToStudentSubmissions = (studentId: string, callback: (submissions: any[]) => void) => {
-  const q = query(collection(db, 'submissions'), where('studentId', '==', studentId));
-  return onSnapshot(q, (snapshot) => {
-    const submissions = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-    submissions.sort((a: any, b: any) => (b.submittedAt?.toMillis() || 0) - (a.submittedAt?.toMillis() || 0));
-    callback(submissions);
-  }, (err) => {
-    console.error('subscribeToStudentSubmissions error:', err);
-    toast.error('Could not load your history — check Firestore rules. (' + err.code + ')');
-  });
+  let isSubscribed = true;
+  const fetchSubs = async () => {
+    try {
+      const res = await fetch('http://localhost:8000/submissions');
+      if (res.ok && isSubscribed) {
+        const subs = await res.json();
+        const filtered = subs.filter((s: any) => s.student_id === studentId);
+        filtered.sort((a: any, b: any) => new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime());
+        callback(filtered);
+      }
+    } catch (error) {
+      console.error('subscribeToStudentSubmissions error:', error);
+    }
+  };
+  fetchSubs();
+  const intervalId = setInterval(fetchSubs, 3000);
+  return () => {
+    isSubscribed = false;
+    clearInterval(intervalId);
+  };
 };
 
 export const getSubmissionDetails = async (submissionId: string) => {
-  const docRef = doc(db, 'submissions', submissionId);
-  const snap = await getDoc(docRef);
-  if (snap.exists()) {
-    return { id: snap.id, ...snap.data() };
-  }
+  try {
+    const res = await fetch(`http://localhost:8000/submissions/${submissionId}`);
+    if (res.ok) return await res.json();
+  } catch (e) {}
   return null;
 };
 
 // Settings Helpers
 export const subscribeToSettings = (callback: (settings: any) => void) => {
-  const docRef = doc(db, 'settings', 'admin');
-  return onSnapshot(docRef, (docSnap) => {
-    if (docSnap.exists()) {
-      callback(docSnap.data());
-    } else {
-      callback(null);
+  let isSubscribed = true;
+  const fetchSet = async () => {
+    try {
+      const res = await fetch('http://localhost:8000/settings');
+      if (res.ok && isSubscribed) {
+        const settings = await res.json();
+        callback(settings);
+      }
+    } catch (error) {
+      console.error("Error fetching settings:", error);
     }
-  }, (error) => {
-    console.error("Error fetching settings:", error);
-  });
+  };
+  fetchSet();
+  const intervalId = setInterval(fetchSet, 5000);
+  return () => {
+    isSubscribed = false;
+    clearInterval(intervalId);
+  };
 };
 
 export const updateSettings = async (settings: any) => {
-  const docRef = doc(db, 'settings', 'admin');
-  const snap = await getDoc(docRef);
-  
-  const payload = { ...settings, updatedAt: serverTimestamp() };
-  if (snap.exists()) {
-    await updateDoc(docRef, payload);
-  } else {
-    await setDoc(docRef, payload);
-  }
+  await fetch('http://localhost:8000/settings', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(settings),
+  });
 };

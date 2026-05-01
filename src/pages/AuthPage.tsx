@@ -14,6 +14,7 @@ export default function LoginPage() {
     if (!loading && user?.role) {
       // User is logged in and has a role, redirect to their dashboard
       if (user.role === 'admin') navigate('/admin');
+      if (user.role === 'instructor') navigate('/instructor');
       if (user.role === 'student') navigate('/student');
     }
   }, [user, loading, navigate]);
@@ -38,7 +39,7 @@ export default function LoginPage() {
     }
   };
 
-  const handleSelectRole = async (role: 'admin' | 'student') => {
+  const handleSelectRole = async (role: 'admin' | 'student' | 'instructor') => {
     if (!user || !user.email) return;
     setIsSettingRole(true);
     try {
@@ -113,14 +114,22 @@ export default function LoginPage() {
              <p className="text-center text-white/50 mb-8 relative z-10 text-sm">
                 Select your account role to continue
              </p>
-             <div className="grid grid-cols-2 gap-4 relative z-10">
+             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 relative z-10">
                 <button 
                   disabled={isSettingRole}
                   onClick={() => handleSelectRole('student')}
                   className="flex flex-col items-center p-6 border border-white/10 rounded-xl hover:bg-white/5 transition-all text-white/70 hover:text-white"
                 >
                    <GraduationCap className="w-8 h-8 mb-3 text-blue-400" />
-                   <span className="font-medium">Student</span>
+                   <span className="font-medium text-sm">Student</span>
+                </button>
+                <button 
+                  disabled={isSettingRole}
+                  onClick={() => handleSelectRole('instructor')}
+                  className="flex flex-col items-center p-6 border border-white/10 rounded-xl hover:bg-white/5 transition-all text-white/70 hover:text-white"
+                >
+                   <ShieldCheck className="w-8 h-8 mb-3 text-indigo-400" />
+                   <span className="font-medium text-sm">Instructor</span>
                 </button>
                 <button 
                   disabled={isSettingRole}
@@ -128,7 +137,7 @@ export default function LoginPage() {
                   className="flex flex-col items-center p-6 border border-white/10 rounded-xl hover:bg-white/5 transition-all text-white/70 hover:text-white"
                 >
                    <ShieldAlert className="w-8 h-8 mb-3 text-red-400" />
-                   <span className="font-medium">Admin</span>
+                   <span className="font-medium text-sm">Admin</span>
                 </button>
              </div>
              {isSettingRole && <p className="text-center mt-4 text-sm text-indigo-400">Configuring account...</p>}

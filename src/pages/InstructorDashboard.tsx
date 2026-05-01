@@ -121,16 +121,7 @@ export default function InstructorDashboard() {
     }
   };
 
-  const handleSwitchToStudent = async () => {
-    if (confirm("Developer Mode: Switch your account to Student?")) {
-      try {
-        await setUserRole(user.uid, user.email, user.name, 'student');
-        toast.info("Switched to Student portal");
-      } catch (err: any) {
-        toast.error("Failed to switch role: " + err.message);
-      }
-    }
-  };
+
 
   const handleSaveExam = async () => {
     if (!newExamName || !newExamDate || !newExamTime) {
@@ -196,14 +187,7 @@ export default function InstructorDashboard() {
           </Link>
           <div className="flex items-center gap-6">
             <span className="hidden sm:block text-sm text-white/50">{user.email}</span>
-            <button
-              onClick={handleSwitchToStudent}
-              className="flex items-center gap-2 text-sm text-white/50 hover:text-indigo-400 transition-colors bg-white/5 px-3 py-1.5 rounded-lg border border-white/10 hover:border-indigo-400/30"
-              title="Test Mode: Switch Role"
-            >
-              <RotateCcw className="w-4 h-4" />
-              <span className="hidden sm:block text-xs">Switch to Student</span>
-            </button>
+
             <button onClick={logout} className="flex items-center gap-2 text-sm text-white/50 hover:text-red-400 transition-colors bg-white/5 px-3 py-1.5 rounded-lg border border-white/10 hover:border-red-400/30">
               <LogOut className="w-4 h-4" />
               <span>Log Out</span>

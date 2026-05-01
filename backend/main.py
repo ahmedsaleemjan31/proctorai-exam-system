@@ -24,22 +24,46 @@ app.add_middleware(
 os.makedirs("uploads", exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
-from .utils.ai_monitor import AIProctor
-proctor = AIProctor()
+# Global settings cache to prevent DB bottleneck (REQ-22)
+_settings_cache = {
+    "data": None,
+    "last_updated": 0
+}
+
+def get_cached_settings(db: Session):
+    global _settings_cache
+    now = time.time()
+    # Refresh cache every 10 seconds
+    if _settings_cache["data"] is None or (now - _settings_cache["last_updated"]) > 10:
+        sett_obj = db.query(models.Settings).first()
+        if sett_obj:
+            _settings_cache["data"] = {
+                "sensitivity": sett_obj.sensitivity,
+                "isGazeEnabled": sett_obj.isGazeEnabled,
+                "isObjectEnabled": sett_obj.isObjectEnabled,
+                "isAudioEnabled": sett_obj.isAudioEnabled
+            }
+        else:
+            _settings_cache["data"] = {"sensitivity": "medium", "isGazeEnabled": True, "isObjectEnabled": True, "isAudioEnabled": True}
+        _settings_cache["last_updated"] = now
+    return _settings_cache["data"]
 
 @app.post("/analyse-frame")
-def analyse_frame(data: dict):
-    """Real-time webcam frame analysis."""
+def analyse_frame(data: dict, db: Session = Depends(get_db)):
+    """Real-time webcam frame analysis with cached settings."""
     frame_b64 = data.get("image")
     if not frame_b64:
         raise HTTPException(status_code=400, detail="Image data required")
-    return proctor.analyze_frame(frame_b64)
+    
+    settings = get_cached_settings(db)
+    return proctor.analyze_frame(frame_b64, settings)
 
 @app.post("/analyse-audio")
-def analyse_audio(data: dict):
-    """Real-time audio level analysis."""
+def analyse_audio(data: dict, db: Session = Depends(get_db)):
+    """Real-time audio level analysis with cached settings."""
     rms = data.get("rms", 0)
-    return proctor.analyze_audio(rms)
+    settings = get_cached_settings(db)
+    return proctor.analyze_audio(rms, settings)
 
 import csv
 import io
@@ -213,6 +237,7 @@ def get_settings(db: Session = Depends(get_db)):
 @app.put("/settings")
 def update_settings(sett_update: schemas.SettingsUpdate, user_id: str, db: Session = Depends(get_db)):
     """Update system settings. Admin only."""
+    global _settings_cache
     check_role(user_id, db, ["admin"])
     sett = db.query(models.Settings).first()
     if not sett:
@@ -224,4 +249,9 @@ def update_settings(sett_update: schemas.SettingsUpdate, user_id: str, db: Sessi
     
     db.commit()
     db.refresh(sett)
+    
+    # Invalidate cache so changes are immediate (REQ-22)
+    _settings_cache["data"] = None 
+    
     return sett
+

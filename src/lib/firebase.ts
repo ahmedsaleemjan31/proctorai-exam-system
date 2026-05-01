@@ -279,8 +279,8 @@ export const subscribeToSettings = (callback: (settings: any) => void) => {
   };
 };
 
-export const updateSettings = async (settings: any) => {
-  await fetch('http://localhost:8000/settings', {
+export const updateSettings = async (settings: any, userId: string) => {
+  await fetch(`http://localhost:8000/settings?user_id=${userId}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(settings),

@@ -131,16 +131,22 @@ export default function ProctoringReport() {
               const Icon = getIconForType(flag.type);
               const isHighSeverity = flag.type.includes('Face') || flag.type.includes('Tab') || flag.type.includes('Object') || flag.type.includes('Looking Away');
               return (
-                <div key={i} className="flex gap-6 items-start bg-white/5 border border-white/5 p-4 rounded-xl hover:bg-white/10 transition-colors cursor-pointer">
-                  <div className="font-mono text-sm text-white/40 pt-1 w-20">{flag.time}</div>
-                  <div className={`p-2 rounded-lg ${isHighSeverity ? 'bg-red-500/10 text-red-400' : 'bg-yellow-500/10 text-yellow-400'}`}>
-                    <Icon className="w-5 h-5" />
+                <div key={i} className="flex gap-6 items-start bg-white/5 border border-white/5 p-4 rounded-xl hover:bg-white/10 transition-colors cursor-pointer flex-col md:flex-row">
+                  <div className="flex gap-6 w-full">
+                    <div className="font-mono text-sm text-white/40 pt-1 w-20 shrink-0">{flag.time}</div>
+                    <div className={`p-2 rounded-lg shrink-0 ${isHighSeverity ? 'bg-red-500/10 text-red-400' : 'bg-yellow-500/10 text-yellow-400'}`}>
+                      <Icon className="w-5 h-5" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="font-medium">{flag.type}</div>
+                      <div className="text-sm text-white/50 mt-1 capitalize">Severity: {isHighSeverity ? 'high' : 'medium'}</div>
+                    </div>
                   </div>
-                  <div>
-                    <div className="font-medium">{flag.type}</div>
-                    <div className="text-sm text-white/50 mt-1 capitalize">Severity: {isHighSeverity ? 'high' : 'medium'}</div>
-                  </div>
-                  <button className="ml-auto text-xs text-indigo-400 hover:text-indigo-300 mt-2">Jump to video</button>
+                  {flag.image && (
+                    <div className="ml-0 md:ml-[5.5rem] mt-4 md:mt-0">
+                      <img src={flag.image} alt="Incident Evidence" className="h-32 rounded-lg border border-red-500/30 object-cover shadow-lg transform -scale-x-100" />
+                    </div>
+                  )}
                 </div>
               );
             })}

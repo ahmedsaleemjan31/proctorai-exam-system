@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react';
-import { useAppAuth, logout, setUserRole, subscribeToExams, createExam, deleteExam, subscribeToSettings, updateSettings, subscribeToSubmissions } from '../lib/firebase';
-import { ShieldCheck, LogOut, FileCheck2, Users, Settings, Save, RotateCcw, Calendar, Clock, Plus, Trash2, Search, X, AlignLeft, ListChecks, SortDesc, BrainCircuit, Sparkles } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { useAppAuth, logout, setUserRole, subscribeToSettings, updateSettings } from '../lib/firebase';
+import { ShieldCheck, LogOut, Settings, Save, RotateCcw } from 'lucide-react';
+import { motion } from 'motion/react';
 import { Navigate, Link } from 'react-router-dom';
 import { toast } from 'sonner';
-import { generateAIQuestions } from '../lib/gemini';
 
 export default function AdminDashboard() {
   const { user, loading } = useAppAuth();
@@ -19,12 +18,6 @@ export default function AdminDashboard() {
   const [isIdentityEnabled, setIsIdentityEnabled] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
-// Admin Dashboard
-
-
-
-
-
   useEffect(() => {
     const unsubSettings = subscribeToSettings((settings) => {
       if (settings) {
@@ -38,8 +31,6 @@ export default function AdminDashboard() {
         setIsIdentityEnabled(settings.isIdentityEnabled ?? true);
       }
     });
-
-
 
     return () => {
       unsubSettings();
@@ -81,8 +72,6 @@ export default function AdminDashboard() {
     }
   };
 
-
-
   return (
     <div className="min-h-screen bg-[#050505] text-[#FAFAFA] font-sans">
       <nav className="border-b border-white/5 bg-[#0A0A0C]">
@@ -122,115 +111,128 @@ export default function AdminDashboard() {
           </motion.div>
         </div>
 
+        <div className="bg-[#0A0A0C] border border-white/10 rounded-2xl p-6">
+          <div className="flex items-center gap-2 mb-6 text-lg font-medium">
+            <Settings className="w-5 h-5 text-indigo-400" />
+            <h2>Exam Settings & Rules</h2>
+          </div>
 
-
-          <div className="bg-[#0A0A0C] border border-white/10 rounded-2xl p-6">
-            <div className="flex items-center gap-2 mb-6 text-lg font-medium">
-              <Settings className="w-5 h-5 text-indigo-400" />
-              <h2>Exam Settings & Rules</h2>
+          <div className="flex flex-col gap-6">
+            <div>
+              <label className="block text-sm font-medium text-white/70 mb-2">AI Detection Sensitivity</label>
+              <select
+                value={sensitivity}
+                onChange={(e) => setSensitivity(e.target.value)}
+                className="w-full bg-[#111115] border border-white/10 rounded-lg py-2.5 px-3 text-sm text-white outline-none focus:border-indigo-500/50 transition-colors"
+              >
+                <option value="low">Low (Forgiving)</option>
+                <option value="medium">Medium (Standard)</option>
+                <option value="high">Strict (Maximum Security)</option>
+              </select>
+              <p className="text-xs text-white/40 mt-2">Determines how aggressively the AI flags background noise or eye movement.</p>
             </div>
 
-            <div className="flex flex-col gap-6">
-              <div>
-                <label className="block text-sm font-medium text-white/70 mb-2">AI Detection Sensitivity</label>
-                <select
-                  value={sensitivity}
-                  onChange={(e) => setSensitivity(e.target.value)}
-                  className="w-full bg-[#111115] border border-white/10 rounded-lg py-2.5 px-3 text-sm text-white outline-none focus:border-indigo-500/50 transition-colors"
-                >
-                  <option value="low">Low (Forgiving)</option>
-                  <option value="medium">Medium (Standard)</option>
-                  <option value="high">Strict (Maximum Security)</option>
-                </select>
-                <p className="text-xs text-white/40 mt-2">Determines how aggressively the AI flags background noise or eye movement.</p>
-              </div>
+            <div>
+              <label className="block text-sm font-medium text-white/70 mb-2">Allowed Applications (Comma Separated)</label>
+              <input
+                type="text"
+                value={allowedApps}
+                onChange={(e) => setAllowedApps(e.target.value)}
+                placeholder="e.g., Calculator, VS Code"
+                className="w-full bg-[#111115] border border-white/10 rounded-lg py-2.5 px-3 text-sm text-white outline-none focus:border-indigo-500/50 transition-colors"
+              />
+            </div>
 
+            <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-white/70 mb-2">Allowed Applications (Comma Separated)</label>
+                <label className="block text-sm font-medium text-white/70 mb-2">Default Time Limit (min)</label>
                 <input
-                  type="text"
-                  value={allowedApps}
-                  onChange={(e) => setAllowedApps(e.target.value)}
-                  placeholder="e.g., Calculator, VS Code"
+                  type="number"
+                  value={timeLimit}
+                  onChange={(e) => setTimeLimit(parseInt(e.target.value))}
                   className="w-full bg-[#111115] border border-white/10 rounded-lg py-2.5 px-3 text-sm text-white outline-none focus:border-indigo-500/50 transition-colors"
                 />
               </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-white/70 mb-2">Default Time Limit (min)</label>
-                  <input
-                    type="number"
-                    value={timeLimit}
-                    onChange={(e) => setTimeLimit(parseInt(e.target.value))}
-                    className="w-full bg-[#111115] border border-white/10 rounded-lg py-2.5 px-3 text-sm text-white outline-none focus:border-indigo-500/50 transition-colors"
-                  />
-                </div>
-                <div className="flex flex-col justify-center pt-6">
-                  <label className="flex items-center gap-3 cursor-pointer group">
-                    <div className={`w-10 h-5 rounded-full relative transition-colors ${lockdown ? 'bg-indigo-500' : 'bg-white/10'}`} onClick={() => setLockdown(!lockdown)}>
-                      <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${lockdown ? 'translate-x-5' : 'translate-x-0'}`} />
-                    </div>
-                    <span className="text-sm font-medium text-white/70 group-hover:text-white transition-colors">Browser Lockdown</span>
-                  </label>
-                </div>
-              </div>
-
-              <div className="space-y-4 border-t border-white/5 pt-6">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-white/30 mb-2">Advanced AI Modules</h3>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <label className="flex items-center justify-between p-3 bg-white/5 border border-white/5 rounded-xl cursor-pointer hover:bg-white/10 transition-colors">
-                    <span className="text-sm text-white/70">Gaze Tracking</span>
-                    <div className={`w-8 h-4 rounded-full relative transition-colors ${isGazeEnabled ? 'bg-indigo-500' : 'bg-white/10'}`} onClick={() => setIsGazeEnabled(!isGazeEnabled)}>
-                      <div className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${isGazeEnabled ? 'translate-x-4' : 'translate-x-0'}`} />
-                    </div>
-                  </label>
-
-                  <label className="flex items-center justify-between p-3 bg-white/5 border border-white/5 rounded-xl cursor-pointer hover:bg-white/10 transition-colors">
-                    <span className="text-sm text-white/70">Object Detection</span>
-                    <div className={`w-8 h-4 rounded-full relative transition-colors ${isObjectEnabled ? 'bg-indigo-500' : 'bg-white/10'}`} onClick={() => setIsObjectEnabled(!isObjectEnabled)}>
-                      <div className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${isObjectEnabled ? 'translate-x-4' : 'translate-x-0'}`} />
-                    </div>
-                  </label>
-
-                  <label className="flex items-center justify-between p-3 bg-white/5 border border-white/5 rounded-xl cursor-pointer hover:bg-white/10 transition-colors">
-                    <span className="text-sm text-white/70">Audio Monitoring</span>
-                    <div className={`w-8 h-4 rounded-full relative transition-colors ${isAudioEnabled ? 'bg-indigo-500' : 'bg-white/10'}`} onClick={() => setIsAudioEnabled(!isAudioEnabled)}>
-                      <div className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${isAudioEnabled ? 'translate-x-4' : 'translate-x-0'}`} />
-                    </div>
-                  </label>
-
-                  <label className="flex items-center justify-between p-3 bg-white/5 border border-white/5 rounded-xl cursor-pointer hover:bg-white/10 transition-colors">
-                    <span className="text-sm text-white/70">Identity Selfie</span>
-                    <div className={`w-8 h-4 rounded-full relative transition-colors ${isIdentityEnabled ? 'bg-indigo-500' : 'bg-white/10'}`} onClick={() => setIsIdentityEnabled(!isIdentityEnabled)}>
-                      <div className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${isIdentityEnabled ? 'translate-x-4' : 'translate-x-0'}`} />
-                    </div>
-                  </label>
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-white/5 mt-2">
-                <button
-                  onClick={handleSaveSettings}
-                  disabled={isSaving}
-                  className="w-full py-2.5 bg-white text-black font-medium rounded-lg hover:bg-white/90 transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
-                >
-                  {isSaving ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-black/20 border-t-black rounded-full animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="w-4 h-4" /> Save Configuration
-                    </>
-                  )}
-                </button>
+              <div className="flex flex-col justify-center pt-6">
+                <label className="flex items-center gap-3 cursor-pointer group">
+                  <div 
+                    className={`w-10 h-5 rounded-full relative transition-colors ${lockdown ? 'bg-indigo-500' : 'bg-white/10'}`} 
+                    onClick={() => setLockdown(!lockdown)}
+                  >
+                    <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${lockdown ? 'translate-x-5' : 'translate-x-0'}`} />
+                  </div>
+                  <span className="text-sm font-medium text-white/70 group-hover:text-white transition-colors">Browser Lockdown</span>
+                </label>
               </div>
             </div>
+
+            <div className="space-y-4 border-t border-white/5 pt-6">
+              <h3 className="text-xs font-bold uppercase tracking-widest text-white/30 mb-2">Advanced AI Modules</h3>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <label className="flex items-center justify-between p-3 bg-white/5 border border-white/5 rounded-xl cursor-pointer hover:bg-white/10 transition-colors">
+                  <span className="text-sm text-white/70">Gaze Tracking</span>
+                  <div 
+                    className={`w-8 h-4 rounded-full relative transition-colors ${isGazeEnabled ? 'bg-indigo-500' : 'bg-white/10'}`} 
+                    onClick={() => setIsGazeEnabled(!isGazeEnabled)}
+                  >
+                    <div className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${isGazeEnabled ? 'translate-x-4' : 'translate-x-0'}`} />
+                  </div>
+                </label>
+
+                <label className="flex items-center justify-between p-3 bg-white/5 border border-white/5 rounded-xl cursor-pointer hover:bg-white/10 transition-colors">
+                  <span className="text-sm text-white/70">Object Detection</span>
+                  <div 
+                    className={`w-8 h-4 rounded-full relative transition-colors ${isObjectEnabled ? 'bg-indigo-500' : 'bg-white/10'}`} 
+                    onClick={() => setIsObjectEnabled(!isObjectEnabled)}
+                  >
+                    <div className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${isObjectEnabled ? 'translate-x-4' : 'translate-x-0'}`} />
+                  </div>
+                </label>
+
+                <label className="flex items-center justify-between p-3 bg-white/5 border border-white/5 rounded-xl cursor-pointer hover:bg-white/10 transition-colors">
+                  <span className="text-sm text-white/70">Audio Monitoring</span>
+                  <div 
+                    className={`w-8 h-4 rounded-full relative transition-colors ${isAudioEnabled ? 'bg-indigo-500' : 'bg-white/10'}`} 
+                    onClick={() => setIsAudioEnabled(!isAudioEnabled)}
+                  >
+                    <div className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${isAudioEnabled ? 'translate-x-4' : 'translate-x-0'}`} />
+                  </div>
+                </label>
+
+                <label className="flex items-center justify-between p-3 bg-white/5 border border-white/5 rounded-xl cursor-pointer hover:bg-white/10 transition-colors">
+                  <span className="text-sm text-white/70">Identity Selfie</span>
+                  <div 
+                    className={`w-8 h-4 rounded-full relative transition-colors ${isIdentityEnabled ? 'bg-indigo-500' : 'bg-white/10'}`} 
+                    onClick={() => setIsIdentityEnabled(!isIdentityEnabled)}
+                  >
+                    <div className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${isIdentityEnabled ? 'translate-x-4' : 'translate-x-0'}`} />
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-white/5 mt-2">
+              <button
+                onClick={handleSaveSettings}
+                disabled={isSaving}
+                className="w-full py-2.5 bg-white text-black font-medium rounded-lg hover:bg-white/90 transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+              >
+                {isSaving ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-black/20 border-t-black rounded-full animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" /> Save Configuration
+                  </>
+                )}
+              </button>
+            </div>
           </div>
+        </div>
       </main>
     </div>
   );
-}
+}

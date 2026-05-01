@@ -111,6 +111,27 @@ export const logout = async () => {
   await signOut(auth);
 };
 
+export const subscribeToUsers = (callback: (users: any[]) => void) => {
+  let isSubscribed = true;
+  const fetchUsers = async () => {
+    try {
+      const res = await fetch('http://localhost:8000/users');
+      if (res.ok && isSubscribed) {
+        const users = await res.json();
+        callback(users);
+      }
+    } catch (error) {
+      console.error("Error fetching users:", error);
+    }
+  };
+  fetchUsers();
+  const intervalId = setInterval(fetchUsers, 5000);
+  return () => {
+    isSubscribed = false;
+    clearInterval(intervalId);
+  };
+};
+
 // Exam Helpers
 export const subscribeToExams = (callback: (exams: any[]) => void) => {
   let isSubscribed = true;

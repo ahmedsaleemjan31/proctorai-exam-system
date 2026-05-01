@@ -1,5 +1,9 @@
+import os
+import base64
+import uuid
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from typing import List
 from . import models, schemas
@@ -17,6 +21,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+os.makedirs("uploads", exist_ok=True)
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+
 @app.post("/users")
 def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db_user = db.query(models.User).filter(models.User.id == user.id).first()
@@ -27,6 +34,10 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_user)
     return new_user
+
+@app.get("/users")
+def get_all_users(db: Session = Depends(get_db)):
+    return db.query(models.User).all()
 
 @app.get("/users/{user_id}")
 def get_user(user_id: str, db: Session = Depends(get_db)):
@@ -74,7 +85,34 @@ def delete_exam(exam_id: str, db: Session = Depends(get_db)):
 
 @app.post("/submissions")
 def create_submission(sub: schemas.SubmissionCreate, db: Session = Depends(get_db)):
-    db_sub = models.Submission(**sub.model_dump())
+    sub_data = sub.model_dump()
+    
+    # Process incidents to extract base64 images
+    for incident in sub_data.get("incidents", []):
+        if "image" in incident and incident["image"] and incident["image"].startswith("data:image"):
+            try:
+                # Extract base64 string
+                header, encoded = incident["image"].split(",", 1)
+                file_extension = "jpg"
+                if "png" in header:
+                    file_extension = "png"
+                
+                # Decode and save
+                file_data = base64.b64decode(encoded)
+                filename = f"{uuid.uuid4()}.{file_extension}"
+                filepath = os.path.join("uploads", filename)
+                
+                with open(filepath, "wb") as f:
+                    f.write(file_data)
+                
+                # Replace base64 string with URL
+                incident["image"] = f"http://localhost:8000/uploads/{filename}"
+            except Exception as e:
+                print("Failed to process image:", e)
+                # If it fails, we keep the original string or set to None
+                pass
+
+    db_sub = models.Submission(**sub_data)
     db.add(db_sub)
     db.commit()
     db.refresh(db_sub)

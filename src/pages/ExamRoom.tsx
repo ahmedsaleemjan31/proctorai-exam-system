@@ -18,7 +18,7 @@ export default function ExamRoom() {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [answers, setAnswers] = useState<Record<number, string>>({});
-  const [incidents, setIncidents] = useState<{ time: string, type: string }[]>([]);
+  const [incidents, setIncidents] = useState<{ time: string, type: string, image?: string }[]>([]);
   const [isModelLoaded, setIsModelLoaded] = useState(false);
   const [aiWarning, setAiWarning] = useState<string | null>(null);
   const [examData, setExamData] = useState<any>(null);
@@ -36,6 +36,25 @@ export default function ExamRoom() {
   const lastIncidentTimeRef = useRef<Record<string, number>>({});
   const faceMissingCountRef = useRef(0);
 
+  const captureEvidence = () => {
+    const video = videoRef.current;
+    if (!video || !stream) return undefined;
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(video, 0, 0);
+        // Compress the image slightly to save DB space
+        return canvas.toDataURL('image/jpeg', 0.5);
+      }
+    } catch (e) {
+      console.error("Failed to capture evidence:", e);
+    }
+    return undefined;
+  };
+
   // Browser Lockdown
   useEffect(() => {
     const requestFS = () => {
@@ -48,14 +67,16 @@ export default function ExamRoom() {
 
     const handleVisibilityChange = () => {
       if (document.hidden) {
-        setIncidents(prev => [...prev, { time: new Date().toLocaleTimeString(), type: "Tab Switched / Out of Focus" }]);
+        const evidence = captureEvidence();
+        setIncidents(prev => [...prev, { time: new Date().toLocaleTimeString(), type: "Tab Switched / Out of Focus", image: evidence }]);
         toast.error("Warning: Tab switching is prohibited!", { style: { background: '#ef4444', color: 'white', border: 'none' } });
       }
     };
 
     const handleFullscreenChange = () => {
       if (!document.fullscreenElement) {
-        setIncidents(prev => [...prev, { time: new Date().toLocaleTimeString(), type: "Exited Fullscreen" }]);
+        const evidence = captureEvidence();
+        setIncidents(prev => [...prev, { time: new Date().toLocaleTimeString(), type: "Exited Fullscreen", image: evidence }]);
         toast.error("Warning: You left fullscreen mode!", { style: { background: '#ef4444', color: 'white', border: 'none' } });
       }
     };
@@ -130,14 +151,16 @@ export default function ExamRoom() {
           newWarning = "Face Not Detected";
 
           if (faceMissingCountRef.current >= 2 && now - (lastIncidentTimeRef.current['face_missing'] || 0) > 20000) {
-            setIncidents(prev => [...prev, { time: new Date().toLocaleTimeString(), type: "Face Not Detected" }]);
+            const evidence = captureEvidence();
+            setIncidents(prev => [...prev, { time: new Date().toLocaleTimeString(), type: "Face Not Detected", image: evidence }]);
             lastIncidentTimeRef.current['face_missing'] = now;
           }
         } else if (detections.length > 1) {
           faceMissingCountRef.current = 0;
           newWarning = "Multiple Faces Detected!";
           if (now - (lastIncidentTimeRef.current['multi_face'] || 0) > 10000) {
-            setIncidents(prev => [...prev, { time: new Date().toLocaleTimeString(), type: "Multiple Faces Detected" }]);
+            const evidence = captureEvidence();
+            setIncidents(prev => [...prev, { time: new Date().toLocaleTimeString(), type: "Multiple Faces Detected", image: evidence }]);
             lastIncidentTimeRef.current['multi_face'] = now;
           }
         } else {
@@ -153,7 +176,8 @@ export default function ExamRoom() {
           if (forbidden) {
             newWarning = `Prohibited Object: ${forbidden.class}`;
             if (now - (lastIncidentTimeRef.current['object'] || 0) > 15000) {
-              setIncidents(prev => [...prev, { time: new Date().toLocaleTimeString(), type: `Object Detected: ${forbidden.class}` }]);
+              const evidence = captureEvidence();
+              setIncidents(prev => [...prev, { time: new Date().toLocaleTimeString(), type: `Object Detected: ${forbidden.class}`, image: evidence }]);
               lastIncidentTimeRef.current['object'] = now;
             }
           }
@@ -208,7 +232,8 @@ export default function ExamRoom() {
         const lastNoise = lastIncidentTimeRef.current['noise'] || 0;
 
         if (now - lastNoise > 10000) { // 10 second cooldown for noise incidents
-          setIncidents(prev => [...prev, { time: new Date().toLocaleTimeString(), type: "Suspicious Noise Detected" }]);
+          const evidence = captureEvidence();
+          setIncidents(prev => [...prev, { time: new Date().toLocaleTimeString(), type: "Suspicious Noise Detected", image: evidence }]);
           toast.warning("Loud noise detected! Please remain quiet.", { duration: 2000 });
           lastIncidentTimeRef.current['noise'] = now;
         }

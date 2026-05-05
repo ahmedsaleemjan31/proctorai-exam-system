@@ -1,10 +1,29 @@
 import { useState, useEffect } from 'react';
 import { useAppAuth, logout, setUserRole, subscribeToExams, createExam, deleteExam, subscribeToSettings, updateSettings, subscribeToSubmissions } from '../lib/firebase';
-import { ShieldCheck, LogOut, FileCheck2, Users, Settings, Save, RotateCcw, Calendar, Clock, Plus, Trash2, Search, X, AlignLeft, ListChecks, SortDesc, BrainCircuit, Sparkles } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { ShieldCheck, LogOut, FileCheck2, Users, Settings, Save, RotateCcw, Calendar, Clock, Plus, Trash2, Search, X, AlignLeft, ListChecks, SortDesc, BrainCircuit, Sparkles, UserPlus } from 'lucide-react';
+import { motion, AnimatePresence, useSpring, animate } from 'motion/react';
 import { Navigate, Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { generateAIQuestions } from '../lib/gemini';
+import SpotlightCard from '../components/SpotlightCard';
+import SkeletonLoader from '../components/SkeletonLoader';
+import Magnetic from '../components/Magnetic';
+import TiltCard from '../components/TiltCard';
+
+function AnimatedCounter({ value }: { value: number }) {
+  const [displayValue, setDisplayValue] = useState(0);
+  
+  useEffect(() => {
+    const controls = animate(displayValue, value, {
+      duration: 1.5,
+      ease: "easeOut",
+      onUpdate: (v) => setDisplayValue(Math.floor(v))
+    });
+    return controls.stop;
+  }, [value]);
+
+  return <>{displayValue}</>;
+}
 
 export default function InstructorDashboard() {
   const { user, loading } = useAppAuth();
@@ -26,6 +45,8 @@ export default function InstructorDashboard() {
   const [newExamDate, setNewExamDate] = useState('');
   const [newExamTime, setNewExamTime] = useState('');
   const [submissions, setSubmissions] = useState<any[]>([]);
+  const [allStudents, setAllStudents] = useState<any[]>([]);
+  const [assignedStudents, setAssignedStudents] = useState<string[]>([]);
 
   // Question Builder
   type QType = { id: number; text: string; type: 'textarea' | 'mcq'; options: string };
@@ -69,8 +90,14 @@ export default function InstructorDashboard() {
   const [submissionSort, setSubmissionSort] = useState<'newest' | 'mostFlags'>('newest');
 
   useEffect(() => {
+    // Fetch all users to filter students
+    fetch('http://localhost:8000/users')
+      .then(res => res.json())
+      .then(data => {
+        setAllStudents(data.filter((u: any) => u.role === 'student'));
+      });
+
     const unsubExams = subscribeToExams((fetchedExams) => {
-      // Sort exams by date initially
       setExams(fetchedExams.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()));
     });
     const unsubSettings = subscribeToSettings((settings) => {
@@ -97,7 +124,7 @@ export default function InstructorDashboard() {
     };
   }, []);
 
-  if (loading) return <div></div>;
+  if (loading) return <SkeletonLoader />;
   if (!user || user.role !== 'instructor') return <Navigate to="/login" />;
 
   const handleSaveSettings = async () => {
@@ -121,8 +148,6 @@ export default function InstructorDashboard() {
     }
   };
 
-
-
   const handleSaveExam = async () => {
     if (!newExamName || !newExamDate || !newExamTime) {
       toast.error('Please fill in all fields');
@@ -136,33 +161,38 @@ export default function InstructorDashboard() {
           if (q.type === 'mcq') {
             return { ...base, options: q.options.split(',').map(o => o.trim()).filter(Boolean) };
           }
-          return base; // essay — no options field at all
+          return base;
         });
-      await createExam(newExamName, newExamDate, newExamTime, user!.uid, questions);
+      await createExam(newExamName, newExamDate, newExamTime, user!.uid, questions, assignedStudents);
       setShowNewExamForm(false);
       setNewExamName('');
       setNewExamDate('');
       setNewExamTime('');
       setNewExamQuestions([]);
-      toast.success(`Exam scheduled with ${questions.length} question(s)!`);
+      setAssignedStudents([]);
+      toast.success(`Exam scheduled for ${assignedStudents.length || 'all'} students!`);
     } catch (err: any) {
       toast.error('Failed to create exam: ' + err.message);
     }
   };
 
+  const getRealFlags = (incidents: any[]) => (incidents || []).filter(i => !i.type.includes('Identity Verified'));
+
   const filteredSubmissions = submissions
     .filter(s => {
       const matchSearch = !submissionSearch ||
-        s.studentName?.toLowerCase().includes(submissionSearch.toLowerCase()) ||
-        s.studentEmail?.toLowerCase().includes(submissionSearch.toLowerCase());
+        s.student_name?.toLowerCase().includes(submissionSearch.toLowerCase()) ||
+        s.student_email?.toLowerCase().includes(submissionSearch.toLowerCase()) ||
+        s.exam_id?.toLowerCase().includes(submissionSearch.toLowerCase());
+      const realFlags = getRealFlags(s.incidents);
       const matchFilter =
-        submissionFilter === 'flagged' ? (s.incidents?.length || 0) > 0 :
-          submissionFilter === 'clean' ? (s.incidents?.length || 0) === 0 : true;
+        submissionFilter === 'flagged' ? realFlags.length > 0 :
+          submissionFilter === 'clean' ? realFlags.length === 0 : true;
       return matchSearch && matchFilter;
     })
     .sort((a, b) =>
       submissionSort === 'mostFlags'
-        ? (b.incidents?.length || 0) - (a.incidents?.length || 0)
+        ? getRealFlags(b.incidents).length - getRealFlags(a.incidents).length
         : (b.submittedAt?.toMillis() || 0) - (a.submittedAt?.toMillis() || 0)
     );
 
@@ -178,8 +208,8 @@ export default function InstructorDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-[#050505] text-[#FAFAFA] font-sans">
-      <nav className="border-b border-white/5 bg-[#0A0A0C]">
+    <div className="min-h-screen bg-transparent text-[#FAFAFA] font-sans">
+      <nav className="border-b border-white/5 bg-[#0A0A0C]/80 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2 font-display font-medium text-lg">
             <ShieldCheck className="w-5 h-5 text-indigo-400" />
@@ -200,35 +230,56 @@ export default function InstructorDashboard() {
         <h1 className="text-3xl font-display font-bold mb-8">Dashboard Overview</h1>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-          <motion.div whileHover={{ y: -4 }} className="bg-[#0A0A0C] border border-white/10 rounded-2xl p-6">
-            <div className="w-10 h-10 bg-indigo-500/10 rounded-xl flex items-center justify-center mb-4">
-              <FileCheck2 className="w-5 h-5 text-indigo-400" />
-            </div>
-            <div className="text-sm text-white/50 mb-1">Active Exams</div>
-            <div className="text-3xl font-semibold">{exams.length}</div>
-          </motion.div>
+          <TiltCard>
+            <Magnetic strength={0.1}>
+              <motion.div whileHover={{ y: -8 }} className="bg-glass border border-white/10 rounded-2xl p-6 glow-effect relative overflow-hidden transition-all hover:shadow-[0_15px_40px_rgba(99,102,241,0.15)] group h-full">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 blur-[50px] rounded-full group-hover:bg-indigo-500/30 group-hover:scale-150 transition-all duration-700 pointer-events-none" />
+                <Magnetic strength={0.4}>
+                  <div className="w-10 h-10 bg-indigo-500/10 rounded-xl flex items-center justify-center mb-4 relative z-10 shadow-inner">
+                    <FileCheck2 className="w-5 h-5 text-indigo-400 drop-shadow-[0_0_8px_rgba(99,102,241,0.5)]" />
+                  </div>
+                </Magnetic>
+                <div className="text-sm text-white/50 mb-1">Active Exams</div>
+                <div className="text-3xl font-semibold"><AnimatedCounter value={exams.length} /></div>
+              </motion.div>
+            </Magnetic>
+          </TiltCard>
 
-          <motion.div whileHover={{ y: -4 }} className="bg-[#0A0A0C] border border-white/10 rounded-2xl p-6">
-            <div className="w-10 h-10 bg-blue-500/10 rounded-xl flex items-center justify-center mb-4">
-              <Users className="w-5 h-5 text-blue-400" />
-            </div>
-            <div className="text-sm text-white/50 mb-1">Total Submissions</div>
-            <div className="text-3xl font-semibold">{submissions.length}</div>
-          </motion.div>
+          <TiltCard>
+            <Magnetic strength={0.1}>
+              <motion.div whileHover={{ y: -8 }} className="bg-glass border border-white/10 rounded-2xl p-6 glow-effect relative overflow-hidden transition-all hover:shadow-[0_15px_40px_rgba(59,130,246,0.15)] group h-full">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 blur-[50px] rounded-full group-hover:bg-blue-500/30 group-hover:scale-150 transition-all duration-700 pointer-events-none" />
+                <Magnetic strength={0.4}>
+                  <div className="w-10 h-10 bg-blue-500/10 rounded-xl flex items-center justify-center mb-4 relative z-10 shadow-inner">
+                    <Users className="w-5 h-5 text-blue-400 drop-shadow-[0_0_8px_rgba(59,130,246,0.5)]" />
+                  </div>
+                </Magnetic>
+                <div className="text-sm text-white/50 mb-1">Total Submissions</div>
+                <div className="text-3xl font-semibold"><AnimatedCounter value={submissions.length} /></div>
+              </motion.div>
+            </Magnetic>
+          </TiltCard>
 
-          <motion.div whileHover={{ y: -4 }} className="bg-[#0A0A0C] border border-white/10 rounded-2xl p-6">
-            <div className="w-10 h-10 bg-red-500/10 rounded-xl flex items-center justify-center mb-4">
-              <ShieldCheck className="w-5 h-5 text-red-400" />
-            </div>
-            <div className="text-sm text-white/50 mb-1">Flagged Incidents</div>
-            <div className="text-3xl font-semibold text-red-400">
-              {submissions.filter(s => (s.incidents?.length || 0) > 0).length}
-            </div>
-          </motion.div>
+          <TiltCard>
+            <Magnetic strength={0.1}>
+              <motion.div whileHover={{ y: -8 }} className="bg-glass border border-white/10 rounded-2xl p-6 glow-effect relative overflow-hidden transition-all hover:shadow-[0_15px_40px_rgba(248,113,113,0.15)] group h-full">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/10 blur-[50px] rounded-full group-hover:bg-red-500/30 group-hover:scale-150 transition-all duration-700 pointer-events-none" />
+                <Magnetic strength={0.4}>
+                  <div className="w-10 h-10 bg-red-500/10 rounded-xl flex items-center justify-center mb-4 relative z-10 shadow-inner">
+                    <ShieldCheck className="w-5 h-5 text-red-400 drop-shadow-[0_0_8px_rgba(248,113,113,0.5)]" />
+                  </div>
+                </Magnetic>
+                <div className="text-sm text-white/50 mb-1">Flagged Incidents</div>
+                <div className="text-3xl font-semibold text-red-400">
+                  <AnimatedCounter value={submissions.filter(s => (s.incidents?.length || 0) > 0).length} />
+                </div>
+              </motion.div>
+            </Magnetic>
+          </TiltCard>
         </div>
 
         {/* Schedule & Calendar View */}
-        <div className="bg-[#0A0A0C] border border-white/10 rounded-2xl p-6 mb-8 relative overflow-hidden flex flex-col">
+        <div className="bg-glass border border-white/10 rounded-2xl p-6 mb-8 relative overflow-hidden flex flex-col shadow-lg">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-2 text-lg font-medium">
               <Calendar className="w-5 h-5 text-blue-400" />
@@ -264,6 +315,38 @@ export default function InstructorDashboard() {
                   <input type="time" value={newExamTime} onChange={e => setNewExamTime(e.target.value)}
                     className="w-full bg-[#111115] border border-white/10 rounded-lg py-2 px-3 text-sm text-white outline-none focus:border-indigo-500/50 transition-colors [color-scheme:dark]" />
                 </div>
+              </div>
+
+              {/* Student Assignment */}
+              <div className="border-t border-white/5 pt-5 mb-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <UserPlus className="w-4 h-4 text-blue-400" />
+                  <span className="text-sm font-medium text-blue-200">Assign Students (Optional)</span>
+                </div>
+                <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-2 bg-[#050505] rounded-lg border border-white/5">
+                  {allStudents.length > 0 ? allStudents.map(student => (
+                    <button
+                      key={student.id}
+                      onClick={() => {
+                        if (assignedStudents.includes(student.id)) {
+                          setAssignedStudents(prev => prev.filter(id => id !== student.id));
+                        } else {
+                          setAssignedStudents(prev => [...prev, student.id]);
+                        }
+                      }}
+                      className={`px-3 py-1.5 rounded-full text-xs transition-all border ${
+                        assignedStudents.includes(student.id)
+                          ? 'bg-blue-600 border-blue-500 text-white'
+                          : 'bg-white/5 border-white/10 text-white/40 hover:border-white/20'
+                      }`}
+                    >
+                      {student.name || student.email}
+                    </button>
+                  )) : (
+                    <div className="text-[10px] text-white/20 p-2 italic">No students found in the system.</div>
+                  )}
+                </div>
+                <p className="text-[10px] text-white/30 mt-2">If no students are selected, the exam will be visible to everyone.</p>
               </div>
 
               {/* AI Generator Panel */}
@@ -345,24 +428,30 @@ export default function InstructorDashboard() {
                 <button onClick={() => { setShowNewExamForm(false); setNewExamQuestions([]); }}
                   className="px-4 py-2 text-sm text-white/60 hover:text-white transition-colors">Cancel</button>
                 <button onClick={handleSaveExam}
-                  className="px-4 py-2 text-sm bg-white text-black font-medium rounded-lg hover:bg-white/90 transition-colors">Save Exam</button>
+                  className="relative inline-flex h-10 overflow-hidden rounded-lg p-[1.5px] focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-2 focus:ring-offset-[#050505] shadow-[0_0_15px_rgba(99,102,241,0.2)] group transition-shadow cursor-pointer"
+                >
+                  <span className="absolute inset-[-1000%] animate-[spin_3s_linear_infinite] bg-[conic-gradient(from_90deg_at_50%_50%,#c084fc_0%,#818cf8_50%,#c084fc_100%)]" />
+                  <span className="inline-flex h-full w-full items-center justify-center rounded-[6.5px] bg-[#0A0A0C] px-4 py-2 text-sm font-medium text-white backdrop-blur-3xl group-hover:bg-[#121214] transition-colors">
+                    Save Exam
+                  </span>
+                </button>
               </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               {exams.length > 0 ? exams.map((exam) => (
-                <div key={exam.id} className="bg-white/5 border border-white/10 rounded-xl p-4 flex flex-col hover:border-white/20 transition-colors group">
+                <SpotlightCard whileHover={{ scale: 1.02, y: -2 }} key={exam.id} className="bg-glass border border-white/10 rounded-xl p-4 flex flex-col hover:border-white/20 transition-all shadow-sm hover:shadow-[0_5px_15px_rgba(0,0,0,0.3)]">
                   <div className="flex justify-between items-start mb-3">
                     <div className="text-sm font-semibold truncate pr-2" title={exam.name}>{exam.name}</div>
                     <button
                       onClick={() => handleDeleteExam(exam.id)}
-                      className="text-white/30 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all p-1 hover:bg-white/5 rounded-md"
+                      className="text-white/30 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all p-1 hover:bg-white/5 rounded-md relative z-20"
                       title="Delete Exam"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
-                  <div className="mt-auto flex flex-col gap-2">
+                  <div className="mt-auto flex flex-col gap-2 relative z-20">
                     <div className="flex items-center gap-2 text-xs text-white/60">
                       <Calendar className="w-3.5 h-3.5 text-white/40" />
                       {new Date(exam.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })}
@@ -371,8 +460,14 @@ export default function InstructorDashboard() {
                       <Clock className="w-3.5 h-3.5 text-white/40" />
                       {exam.time}
                     </div>
+                    {exam.assigned_students?.length > 0 && (
+                      <div className="flex items-center gap-2 text-[10px] text-blue-400 mt-1">
+                        <Users className="w-3 h-3" />
+                        {exam.assigned_students.length} Assigned Students
+                      </div>
+                    )}
                   </div>
-                </div>
+                </SpotlightCard>
               )) : (
                 <div className="col-span-full py-8 text-center text-white/40 text-sm">
                   No exams scheduled yet.
@@ -382,8 +477,8 @@ export default function InstructorDashboard() {
           )}
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <div className="bg-[#0A0A0C] border border-white/10 rounded-2xl p-6 flex flex-col">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 perspective-1000">
+          <div className="bg-glass border border-white/10 rounded-2xl p-6 flex flex-col shadow-lg">
             <h2 className="text-lg font-medium mb-4">Recent Submissions & Alerts</h2>
 
             {/* Search + Filter bar */}
@@ -411,22 +506,23 @@ export default function InstructorDashboard() {
 
             <div className="flex flex-col gap-3 flex-1 overflow-y-auto max-h-[360px] pr-1">
               {filteredSubmissions.length > 0 ? filteredSubmissions.map((sub: any) => {
-                const flagCount = sub.incidents?.length || 0;
+                const realFlags = getRealFlags(sub.incidents);
+                const flagCount = realFlags.length;
                 const hasFlags = flagCount > 0;
                 return (
-                  <div key={sub.id} className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5 hover:border-white/20 transition-colors">
+                  <motion.div whileHover={{ scale: 1.01, x: 5 }} key={sub.id} className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5 hover:border-white/20 transition-all shadow-sm hover:shadow-[0_5px_15px_rgba(0,0,0,0.3)]">
                     <div className="flex gap-3 items-center min-w-0">
                       <div className={`w-2 h-2 rounded-full shrink-0 ${hasFlags ? 'bg-red-500 animate-pulse' : 'bg-green-500'}`} />
                       <div className="min-w-0">
                         <div className="text-sm font-medium">{hasFlags ? `${flagCount} Flag${flagCount > 1 ? 's' : ''}` : 'Clean Session'}</div>
-                        <div className="text-xs text-white/50 truncate">{sub.studentName} · Trust: {sub.trustScore}%</div>
+                        <div className="text-xs text-white/50 truncate">{sub.student_name} · Trust: {sub.trust_score}%</div>
                       </div>
                     </div>
                     <Link to={`/instructor/report/${sub.id}`}
                       className="text-xs px-3 py-1.5 bg-white/10 rounded-md hover:bg-white/20 transition-colors shrink-0 ml-3">
                       Review
                     </Link>
-                  </div>
+                  </motion.div>
                 );
               }) : (
                 <div className="text-sm text-white/40 text-center py-8">
@@ -435,8 +531,6 @@ export default function InstructorDashboard() {
               )}
             </div>
           </div>
-
-          {/* Settings removed from Instructor Dashboard */}
         </div>
       </main>
     </div>

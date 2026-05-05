@@ -8,6 +8,9 @@ import * as faceapi from '@vladmandic/face-api';
 import * as cocoSsd from '@tensorflow-models/coco-ssd';
 import * as tf from '@tensorflow/tfjs';
 import { Camera, Shield, Check, Mic, Monitor, UserCheck } from 'lucide-react';
+import TiltCard from '../components/TiltCard';
+import SpotlightCard from '../components/SpotlightCard';
+import Magnetic from '../components/Magnetic';
 
 export default function ExamRoom() {
   const { id } = useParams();
@@ -374,7 +377,8 @@ export default function ExamRoom() {
     }
 
     try {
-      const trustScore = Math.max(0, 100 - incidents.length * 15);
+      const actualFlags = incidents.filter(i => !i.type.includes('Identity Verified')).length;
+      const trustScore = Math.max(0, 100 - actualFlags * 15);
       const submissionId = await submitExam(
         id || 'unknown_exam',
         user.uid,
@@ -390,16 +394,19 @@ export default function ExamRoom() {
         localStorage.setItem(`verification_${submissionId}`, verificationPhoto);
       }
 
+      const realIncidentCount = incidents.filter(i => !i.type.includes('Identity Verified')).length;
+
       // Pass the incidents securely to the results page
       localStorage.setItem('examIncidents', JSON.stringify(finalIncidents));
-      navigate(`/results/${id}`, { state: { incidentCount: incidents.length } });
+      navigate(`/results/${id}`, { state: { incidentCount: realIncidentCount } });
     } catch (err: any) {
       console.error(err);
       toast.warning("Cloud save failed (check Firestore rules). Saving locally instead.");
 
+      const realIncidentCount = incidents.filter(i => !i.type.includes('Identity Verified')).length;
       // Still navigate so they aren't stuck!
       localStorage.setItem('examIncidents', JSON.stringify(incidents));
-      navigate(`/results/${id}`, { state: { incidentCount: incidents.length } });
+      navigate(`/results/${id}`, { state: { incidentCount: realIncidentCount } });
     }
   };
 
@@ -421,7 +428,6 @@ export default function ExamRoom() {
       onPaste={handlePreventCheating}
       onContextMenu={handlePreventCheating}
     >
-      {/* Verification Overlay */}
       {verificationStage !== 'completed' && (
         <div className="fixed inset-0 z-[100] bg-[#050505] flex items-center justify-center p-6">
           <motion.div
@@ -566,9 +572,16 @@ export default function ExamRoom() {
                 setVerificationStage('completed');
               }}
               disabled={!verificationPhoto || !isModelLoaded}
-              className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(99,102,241,0.4)]"
+              className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(99,102,241,0.4)] relative overflow-hidden"
             >
-              Start Exam Now
+              {verificationPhoto && isModelLoaded && (
+                <motion.div
+                  animate={{ x: ['-100%', '200%'] }}
+                  transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                  className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -skew-x-12"
+                />
+              )}
+              <span className="relative z-10">Start Exam Now</span>
             </button>
           </motion.div>
         </div>
@@ -592,9 +605,16 @@ export default function ExamRoom() {
           <button
             onClick={handleSubmit}
             disabled={isSubmitting}
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 transition-colors px-4 py-1.5 rounded-lg text-sm font-medium shadow-[0_0_15px_rgba(99,102,241,0.3)] disabled:opacity-50"
+            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 transition-colors px-4 py-1.5 rounded-lg text-sm font-medium shadow-[0_0_15px_rgba(99,102,241,0.3)] disabled:opacity-50 relative overflow-hidden"
           >
-            {isSubmitting ? "Submitting..." : "Submit Exam"} <Send className="w-4 h-4" />
+            {!isSubmitting && (
+               <motion.div
+                 animate={{ x: ['-100%', '200%'] }}
+                 transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+                 className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -skew-x-12"
+               />
+            )}
+            <span className="relative z-10">{isSubmitting ? "Submitting..." : "Submit Exam"}</span> <Send className="w-4 h-4 relative z-10" />
           </button>
         </div>
       </nav>
@@ -608,12 +628,12 @@ export default function ExamRoom() {
 
         <div className="space-y-8">
           {questions.map((q, index) => (
+            <SpotlightCard key={q.id}>
             <motion.div
-              key={q.id}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.1 }}
-              className="bg-[#0A0A0C] border border-white/10 rounded-2xl p-6 md:p-8 relative overflow-hidden"
+              className="bg-[#0A0A0C] border border-white/10 rounded-2xl p-6 md:p-8 relative overflow-hidden h-full"
             >
               <div className="flex gap-4 mb-6">
                 <div className="w-8 h-8 rounded-full bg-indigo-500/10 text-indigo-400 flex items-center justify-center font-bold border border-indigo-500/20 shrink-0">
@@ -652,6 +672,7 @@ export default function ExamRoom() {
                 )}
               </div>
             </motion.div>
+            </SpotlightCard>
           ))}
         </div>
       </main>

@@ -5,6 +5,8 @@ import {
   ShieldCheck, Eye, Smartphone, FileCheck2, Lock, ArrowRight, Play, 
   GraduationCap, Building2, CheckCircle2, BrainCircuit, AlertTriangle, Fingerprint
 } from 'lucide-react';
+import Magnetic from '../components/Magnetic';
+import TiltCard from '../components/TiltCard';
 
 export default function LandingPage() {
   const { user, loading } = useAppAuth();
@@ -17,10 +19,10 @@ export default function LandingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#050505] text-[#FAFAFA] font-sans selection:bg-indigo-500/30">
+    <div className="min-h-screen bg-transparent text-[#FAFAFA] font-sans overflow-x-hidden selection:bg-indigo-500/30">
       
       {/* Navbar */}
-      <nav className="fixed top-0 w-full z-50 bg-black/50 backdrop-blur-md border-b border-white/5">
+      <nav className="fixed top-0 w-full z-50 bg-[#050505]/80 backdrop-blur-md border-b border-white/5 transition-all duration-300">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2 font-display font-bold text-xl tracking-tight">
             <ShieldCheck className="w-6 h-6 text-indigo-400" />
@@ -54,9 +56,17 @@ export default function LandingPage() {
       </nav>
 
       {/* Hero Section */}
-      <section className="relative pt-32 pb-20 md:pt-48 md:pb-32 overflow-hidden flex flex-col items-center justify-center text-center px-6">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[500px] bg-indigo-600/20 blur-[120px] rounded-full pointer-events-none" />
-        <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-purple-600/20 blur-[100px] rounded-full pointer-events-none" />
+      <section className="relative pt-32 pb-20 md:pt-48 md:pb-32 overflow-hidden flex flex-col items-center justify-center text-center px-6 perspective-1000">
+        <motion.div 
+          animate={{ rotateZ: 360 }} 
+          transition={{ duration: 50, repeat: Infinity, ease: "linear" }}
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[500px] bg-indigo-600/20 blur-[120px] rounded-full pointer-events-none" 
+        />
+        <motion.div 
+          animate={{ rotateZ: -360 }} 
+          transition={{ duration: 40, repeat: Infinity, ease: "linear" }}
+          className="absolute top-0 right-0 w-[400px] h-[400px] bg-purple-600/20 blur-[100px] rounded-full pointer-events-none" 
+        />
 
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -71,38 +81,64 @@ export default function LandingPage() {
             </span>
             ProctorAI 2.0 is now live
           </div>
-          <h1 className="text-5xl md:text-7xl font-bold font-display tracking-tight leading-[1.1] mb-6">
-             The intelligent standard for <br />
-            <span className="text-gradient">secure assessments.</span>
-          </h1>
+          <motion.h1 
+            initial="hidden" 
+            animate="show" 
+            variants={{
+              hidden: { opacity: 0 },
+              show: { opacity: 1, transition: { staggerChildren: 0.1 } }
+            }}
+            className="text-5xl md:text-7xl font-bold font-display tracking-tight leading-[1.1] mb-6 flex flex-wrap justify-center gap-x-4"
+          >
+            {["The", "intelligent", "standard", "for"].map((word, i) => (
+              <motion.span key={i} variants={{
+                hidden: { opacity: 0, y: 20 },
+                show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 100 } }
+              }} className="inline-block">{word}</motion.span>
+            ))}
+            <motion.span variants={{
+                hidden: { opacity: 0, y: 20 },
+                show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 100 } }
+              }} className="text-gradient w-full mt-2">secure assessments.</motion.span>
+          </motion.h1>
           <p className="text-lg md:text-xl text-white/60 mb-10 max-w-2xl mx-auto leading-relaxed">
             Ensure academic integrity with AI-driven monitoring, real-time behavioral analytics, and seamless LMS integrations. The platform built for modern institutions.
           </p>
           
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-             <Link to="/login">
-                <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="w-full sm:w-auto bg-white text-black px-8 py-3.5 rounded-full font-medium hover:bg-white/90 transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(255,255,255,0.15)] hover:shadow-[0_0_30px_rgba(255,255,255,0.3)] cursor-pointer">
-                  Start Free Trial
-                </motion.button>
-             </Link>
+             <Link to="/login" className="w-full sm:w-auto">
+                <Magnetic strength={0.2} className="w-full sm:w-auto">
+                  <motion.button 
+                    whileHover={{ scale: 1.05 }} 
+                    whileTap={{ scale: 0.95 }} 
+                    className="relative inline-flex h-14 w-full sm:w-auto overflow-hidden rounded-full p-[1.5px] focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-2 focus:ring-offset-[#050505] cursor-pointer shadow-[0_0_20px_rgba(99,102,241,0.2)] hover:shadow-[0_0_40px_rgba(99,102,241,0.4)] transition-shadow group"
+                  >
+                    <span className="absolute inset-[-1000%] animate-[spin_3s_linear_infinite] bg-[conic-gradient(from_90deg_at_50%_50%,#c084fc_0%,#818cf8_50%,#c084fc_100%)]" />
+                    <span className="inline-flex h-full w-full items-center justify-center rounded-full bg-[#050505] px-8 py-3.5 font-medium text-white backdrop-blur-3xl gap-2 group-hover:bg-[#0A0A0C] transition-colors">
+                      Start Free Trial
+                    </span>
+                  </motion.button>
+                </Magnetic>
+              </Link>
           </div>
         </motion.div>
 
-        {/* Hero Image Mockup */}
-        <motion.div
-          initial={{ opacity: 0, y: 40 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 1, delay: 0.2, ease: "easeOut" }}
-          className="w-full max-w-5xl mx-auto mt-20 relative z-10"
-        >
-          <div className="bg-glass rounded-2xl p-2 md:p-4 glow-effect shadow-2xl">
-            <div className="bg-[#0A0A0C] rounded-xl overflow-hidden border border-white/5">
+        {/* Hero Image Mockup (3D) */}
+        <Magnetic strength={0.05} className="w-full max-w-5xl mx-auto mt-20 relative z-10 preserve-3d animate-float">
+          <motion.div
+            initial={{ opacity: 0, y: 60, rotateX: 20 }}
+            animate={{ opacity: 1, y: 0, rotateX: 0 }}
+            transition={{ duration: 1.2, delay: 0.2, type: "spring", stiffness: 100 }}
+            className="w-full h-full relative"
+          >
+            <div className="bg-glass rounded-2xl p-2 md:p-4 glow-effect shadow-[0_30px_60px_rgba(99,102,241,0.2)] border-t border-l border-white/20 transform transition-transform duration-500 hover:scale-[1.02]">
+              <div className="bg-[#0A0A0C] rounded-xl overflow-hidden border border-white/5 relative shadow-inner">
               {/* Fake UI Header */}
               <div className="h-12 border-b border-white/5 flex items-center px-4 gap-2 bg-[#111]">
                 <div className="flex gap-1.5">
-                  <div className="w-3 h-3 rounded-full bg-red-500/80" />
-                  <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
-                  <div className="w-3 h-3 rounded-full bg-green-500/80" />
+                  <div className="w-3 h-3 rounded-full bg-red-500/80 shadow-[0_0_10px_rgba(239,68,68,0.5)]" />
+                  <div className="w-3 h-3 rounded-full bg-yellow-500/80 shadow-[0_0_10px_rgba(234,179,8,0.5)]" />
+                  <div className="w-3 h-3 rounded-full bg-green-500/80 shadow-[0_0_10px_rgba(34,197,94,0.5)]" />
                 </div>
                 <div className="ml-4 text-xs font-mono text-white/40">app.proctorai.com/live-session/CS101</div>
               </div>
@@ -111,55 +147,83 @@ export default function LandingPage() {
                 <div className="w-64 border-r border-white/5 hidden md:block p-4 flex flex-col gap-4">
                   <div className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-2">Live Exams</div>
                   {[1, 2, 3].map((i) => (
-                    <div key={i} className={`p-3 rounded-lg border ${i === 1 ? 'bg-indigo-500/10 border-indigo-500/20' : 'bg-white/5 border-transparent'} flex items-center gap-3`}>
-                      <div className="w-8 h-8 rounded bg-white/10 flex items-center justify-center text-xs">
+                    <motion.div whileHover={{ x: 5 }} key={i} className={`p-3 rounded-lg border ${i === 1 ? 'bg-indigo-500/10 border-indigo-500/20 shadow-[inset_0_0_15px_rgba(99,102,241,0.1)]' : 'bg-white/5 border-transparent'} flex items-center gap-3 cursor-pointer`}>
+                      <div className="w-8 h-8 rounded bg-white/10 flex items-center justify-center text-xs shadow-md">
                         {['CS', 'MA', 'PH'][i-1]}
                       </div>
                       <div className="flex-1">
                         <div className="text-sm font-medium">Midterm {i}</div>
                         <div className="text-xs text-white/50">{24 + i * 12} Students</div>
                       </div>
-                    </div>
+                    </motion.div>
                   ))}
                 </div>
                 <div className="flex-1 p-6 bg-gradient-to-br from-[#0A0A0C] to-[#12121A] relative overflow-hidden">
                    {/* Abstract visualizing of AI tracking */}
-                   <div className="absolute inset-0 flex items-center justify-center opacity-50">
-                      <div className="w-64 h-64 border border-indigo-500/30 rounded-full flex items-center justify-center">
-                        <div className="w-48 h-48 border border-white/10 rounded-full flex items-center justify-center">
-                          <Eye className="w-12 h-12 text-indigo-400 opacity-50" />
+                   <motion.div 
+                     animate={{ rotateZ: 360, scale: [1, 1.05, 1] }} 
+                     transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+                     className="absolute inset-0 flex items-center justify-center opacity-40"
+                   >
+                      <div className="w-64 h-64 border border-indigo-500/30 rounded-full flex items-center justify-center shadow-[0_0_50px_rgba(99,102,241,0.1)]">
+                        <div className="w-48 h-48 border border-white/10 rounded-full flex items-center justify-center shadow-inner">
+                          <Eye className="w-12 h-12 text-indigo-400 opacity-80 drop-shadow-[0_0_15px_rgba(99,102,241,0.8)]" />
                         </div>
                       </div>
                       
                       {/* Fake tracking lines */}
                       <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-                         <path d="M50 50 L20 20 M50 50 L80 30 M50 50 L70 80 M50 50 L30 70" stroke="rgba(99, 102, 241, 0.2)" strokeWidth="0.5" fill="none" />
+                         <path d="M50 50 L20 20 M50 50 L80 30 M50 50 L70 80 M50 50 L30 70" stroke="rgba(99, 102, 241, 0.3)" strokeWidth="0.5" fill="none" />
                       </svg>
-                   </div>
+                   </motion.div>
                    
                    {/* Fake alerts overlay */}
                    <div className="absolute top-6 right-6 flex flex-col gap-3">
-                      <div className="bg-red-500/10 border border-red-500/20 px-4 py-3 rounded-lg flex items-start gap-3 backdrop-blur-md">
-                        <AlertTriangle className="w-5 h-5 text-red-400 mt-0.5" />
+                      <motion.div initial={{ x: 50, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 1 }} className="bg-red-500/10 border border-red-500/30 px-4 py-3 rounded-lg flex items-start gap-3 backdrop-blur-md shadow-[0_10px_20px_rgba(239,68,68,0.1)]">
+                        <AlertTriangle className="w-5 h-5 text-red-400 mt-0.5 drop-shadow-[0_0_8px_rgba(239,68,68,0.8)]" />
                         <div>
                           <div className="text-sm font-medium text-red-200">Multiple Faces Detected</div>
                           <div className="text-xs text-red-400/70">Candidate: J. Doe • 1m ago</div>
                         </div>
-                      </div>
-                      <div className="bg-yellow-500/10 border border-yellow-500/20 px-4 py-3 rounded-lg flex items-start gap-3 backdrop-blur-md">
-                        <Smartphone className="w-5 h-5 text-yellow-400 mt-0.5" />
+                      </motion.div>
+                      <motion.div initial={{ x: 50, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 1.5 }} className="bg-yellow-500/10 border border-yellow-500/30 px-4 py-3 rounded-lg flex items-start gap-3 backdrop-blur-md shadow-[0_10px_20px_rgba(234,179,8,0.1)]">
+                        <Smartphone className="w-5 h-5 text-yellow-400 mt-0.5 drop-shadow-[0_0_8px_rgba(234,179,8,0.8)]" />
                         <div>
                           <div className="text-sm font-medium text-yellow-200">Device Detected</div>
                           <div className="text-xs text-yellow-400/70">Candidate: S. Smith • 3m ago</div>
                         </div>
-                      </div>
+                      </motion.div>
                    </div>
                 </div>
               </div>
             </div>
           </div>
         </motion.div>
+      </Magnetic>
       </section>
+
+      {/* Infinite Marquee Section */}
+      <div className="relative flex overflow-x-hidden border-y border-white/5 bg-white/[0.01] py-8 md:py-12">
+        <div className="absolute inset-0 bg-indigo-500/5 blur-[100px] rounded-full scale-150 animate-pulse pointer-events-none" />
+        <div className="animate-marquee whitespace-nowrap flex items-center relative z-10">
+          {[1, 2].map((i) => (
+            <div key={i} className="flex items-center">
+              <span className="text-4xl md:text-7xl font-bold font-display mx-8 text-white/20 uppercase tracking-tighter italic select-none drop-shadow-[0_0_20px_rgba(255,255,255,0.1)]">AI POWERED</span>
+              <span className="text-4xl md:text-7xl font-bold font-display mx-8 text-indigo-500/50 uppercase tracking-tighter italic select-none drop-shadow-[0_0_25px_rgba(99,102,241,0.5)] animate-pulse">•</span>
+              <span className="text-4xl md:text-7xl font-bold font-display mx-8 text-white/20 uppercase tracking-tighter italic select-none drop-shadow-[0_0_20px_rgba(255,255,255,0.1)]">99.9% ACCURACY</span>
+              <span className="text-4xl md:text-7xl font-bold font-display mx-8 text-purple-500/50 uppercase tracking-tighter italic select-none drop-shadow-[0_0_25px_rgba(168,85,247,0.5)] animate-pulse">•</span>
+              <span className="text-4xl md:text-7xl font-bold font-display mx-8 text-white/20 uppercase tracking-tighter italic select-none drop-shadow-[0_0_20px_rgba(255,255,255,0.1)]">REAL-TIME MONITORING</span>
+              <span className="text-4xl md:text-7xl font-bold font-display mx-8 text-indigo-500/50 uppercase tracking-tighter italic select-none drop-shadow-[0_0_25px_rgba(99,102,241,0.5)] animate-pulse">•</span>
+              <span className="text-4xl md:text-7xl font-bold font-display mx-8 text-white/20 uppercase tracking-tighter italic select-none drop-shadow-[0_0_20px_rgba(255,255,255,0.1)]">BROWSER LOCKDOWN</span>
+              <span className="text-4xl md:text-7xl font-bold font-display mx-8 text-purple-500/50 uppercase tracking-tighter italic select-none drop-shadow-[0_0_25px_rgba(168,85,247,0.5)] animate-pulse">•</span>
+            </div>
+          ))}
+        </div>
+        
+        {/* Subtle fade effect on the edges */}
+        <div className="absolute inset-y-0 left-0 w-32 bg-gradient-to-r from-[#050505] to-transparent z-10" />
+        <div className="absolute inset-y-0 right-0 w-32 bg-gradient-to-l from-[#050505] to-transparent z-10" />
+      </div>
 
       {/* Social Proof */}
       <section className="py-10 border-y border-white/5 bg-white/[0.02]">
@@ -186,65 +250,75 @@ export default function LandingPage() {
 
          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Feature 1 (Large) */}
-            <motion.div whileHover={{ y: -8 }} transition={{ type: "spring", stiffness: 300 }} className="md:col-span-2 bg-glass rounded-3xl p-8 glow-effect flex flex-col justify-between group overflow-hidden relative transition-shadow hover:shadow-[0_8px_30px_rgba(99,102,241,0.15)]">
-               <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 blur-[80px] rounded-full group-hover:bg-indigo-500/20 transition-all duration-500" />
-               <div className="relative z-10 w-14 h-14 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-center mb-6">
-                  <BrainCircuit className="w-7 h-7 text-indigo-400" />
-               </div>
-               <div className="relative z-10 mt-auto pt-32">
-                  <h3 className="text-2xl font-bold font-display mb-2">AI Behavioral Analysis</h3>
-                  <p className="text-white/60 leading-relaxed">
-                     Our proprietary models analyze eye movement, posture, and micro-expressions in real-time. Detects suspicious behavior with 99% accuracy without violating student privacy.
-                  </p>
-               </div>
-            </motion.div>
+            <TiltCard className="md:col-span-2">
+              <motion.div whileHover={{ y: -8 }} className="bg-glass rounded-3xl p-8 glow-effect flex flex-col justify-between group overflow-hidden relative transition-all hover:shadow-[0_20px_50px_rgba(99,102,241,0.2)] h-full">
+                 <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 blur-[80px] rounded-full group-hover:bg-indigo-500/30 group-hover:scale-150 transition-all duration-700" />
+                 <motion.div animate={{ rotateZ: [0, 5, -5, 0] }} transition={{ duration: 6, repeat: Infinity }} className="relative z-10 w-14 h-14 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-center mb-6 shadow-inner">
+                    <BrainCircuit className="w-7 h-7 text-indigo-400 drop-shadow-[0_0_10px_rgba(99,102,241,0.5)]" />
+                 </motion.div>
+                 <div className="relative z-10 mt-auto pt-32">
+                    <h3 className="text-2xl font-bold font-display mb-2 text-white">AI Behavioral Analysis</h3>
+                    <p className="text-white/70 leading-relaxed font-medium">
+                       Our proprietary models analyze eye movement, posture, and micro-expressions in real-time. Detects suspicious behavior with 99% accuracy without violating student privacy.
+                    </p>
+                 </div>
+              </motion.div>
+            </TiltCard>
 
             {/* Feature 2 (Tall) */}
-            <motion.div whileHover={{ y: -8 }} transition={{ type: "spring", stiffness: 300 }} className="bg-glass rounded-3xl p-8 glow-effect flex flex-col group overflow-hidden relative transition-shadow hover:shadow-[0_8px_30px_rgba(168,85,247,0.15)]">
-               <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/10 blur-[60px] rounded-full" />
-               <div className="relative z-10 w-14 h-14 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-center mb-6">
-                  <Fingerprint className="w-7 h-7 text-purple-400" />
-               </div>
-               <h3 className="text-2xl font-bold font-display mb-2 mt-auto">Automated ID Verification</h3>
-               <p className="text-white/60 leading-relaxed text-sm">
-                  Seamlessly verify student identities pre-exam using facial recognition against official university records.
-               </p>
-            </motion.div>
+            <TiltCard>
+              <motion.div whileHover={{ y: -8 }} className="bg-glass rounded-3xl p-8 glow-effect flex flex-col group overflow-hidden relative transition-all hover:shadow-[0_20px_50px_rgba(168,85,247,0.2)] h-full">
+                 <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/10 blur-[60px] rounded-full group-hover:bg-purple-500/30 transition-all duration-700" />
+                 <motion.div whileHover={{ scale: 1.1 }} className="relative z-10 w-14 h-14 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-center mb-6 shadow-inner">
+                    <Fingerprint className="w-7 h-7 text-purple-400 drop-shadow-[0_0_10px_rgba(168,85,247,0.5)]" />
+                 </motion.div>
+                 <h3 className="text-2xl font-bold font-display mb-2 mt-auto text-white">Automated ID Verification</h3>
+                 <p className="text-white/70 leading-relaxed text-sm font-medium">
+                    Seamlessly verify student identities pre-exam using facial recognition against official university records.
+                 </p>
+              </motion.div>
+            </TiltCard>
 
             {/* Feature 3 */}
-            <motion.div whileHover={{ y: -8 }} transition={{ type: "spring", stiffness: 300 }} className="bg-glass rounded-3xl p-8 glow-effect group transition-shadow hover:shadow-[0_8px_30px_rgba(59,130,246,0.15)]">
-               <div className="w-12 h-12 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center mb-6">
-                  <Lock className="w-6 h-6 text-blue-400" />
-               </div>
-               <h3 className="text-xl font-bold font-display mb-2">Browser Lockdown</h3>
-               <p className="text-white/60 text-sm">
-                  Restricts access to dual monitors, keyboard shortcuts, external sites, and unauthorized applications.
-               </p>
-            </motion.div>
+            <TiltCard>
+              <motion.div whileHover={{ y: -8 }} className="bg-glass rounded-3xl p-8 glow-effect group transition-all hover:shadow-[0_15px_40px_rgba(59,130,246,0.2)] border-t border-l border-white/10 h-full">
+                 <div className="w-12 h-12 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center mb-6 shadow-inner">
+                    <Lock className="w-6 h-6 text-blue-400 drop-shadow-[0_0_10px_rgba(59,130,246,0.5)]" />
+                 </div>
+                 <h3 className="text-xl font-bold font-display mb-2 text-white">Browser Lockdown</h3>
+                 <p className="text-white/70 text-sm font-medium">
+                    Restricts access to dual monitors, keyboard shortcuts, external sites, and unauthorized applications.
+                 </p>
+              </motion.div>
+            </TiltCard>
 
             {/* Feature 4 */}
-            <motion.div whileHover={{ y: -8 }} transition={{ type: "spring", stiffness: 300 }} className="bg-glass rounded-3xl p-8 glow-effect group border border-red-500/10 transition-all hover:border-red-500/30 hover:shadow-[0_8px_30px_rgba(248,113,113,0.15)]">
-               <div className="w-12 h-12 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center mb-6">
-                  <AlertTriangle className="w-6 h-6 text-red-400" />
-               </div>
-               <h3 className="text-xl font-bold font-display mb-2">Real-Time Alerts</h3>
-               <p className="text-white/60 text-sm">
-                  Live proctors receive instantly flagged timestamps for manual review when AI detects anomalies.
-               </p>
-            </motion.div>
+            <TiltCard>
+              <motion.div whileHover={{ y: -8 }} className="bg-glass rounded-3xl p-8 glow-effect group border border-red-500/10 transition-all hover:border-red-500/30 hover:shadow-[0_15px_40px_rgba(248,113,113,0.2)] h-full">
+                 <div className="w-12 h-12 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center mb-6 shadow-inner">
+                    <AlertTriangle className="w-6 h-6 text-red-400 drop-shadow-[0_0_10px_rgba(248,113,113,0.5)]" />
+                 </div>
+                 <h3 className="text-xl font-bold font-display mb-2 text-white">Real-Time Alerts</h3>
+                 <p className="text-white/70 text-sm font-medium">
+                    Live proctors receive instantly flagged timestamps for manual review when AI detects anomalies.
+                 </p>
+              </motion.div>
+            </TiltCard>
 
             {/* Feature 5 */}
-            <motion.div whileHover={{ y: -8 }} transition={{ type: "spring", stiffness: 300 }} className="bg-glass rounded-3xl p-8 glow-effect group overflow-hidden relative transition-shadow hover:shadow-[0_8px_30px_rgba(74,222,128,0.15)]">
+            <TiltCard>
+              <motion.div whileHover={{ y: -8 }} className="bg-glass rounded-3xl p-8 glow-effect group overflow-hidden relative transition-all hover:shadow-[0_15px_40px_rgba(74,222,128,0.2)] h-full">
                {/* Decorative background grid */}
-               <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-white/5 to-transparent pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, rgba(255,255,255,0.1) 1px, transparent 0)', backgroundSize: '16px 16px' }} />
-               <div className="w-12 h-12 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center mb-6 relative z-10">
-                  <FileCheck2 className="w-6 h-6 text-green-400" />
+               <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-white/5 to-transparent pointer-events-none transition-all duration-700 group-hover:h-48" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, rgba(255,255,255,0.1) 1px, transparent 0)', backgroundSize: '16px 16px' }} />
+               <div className="w-12 h-12 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center mb-6 relative z-10 shadow-inner">
+                  <FileCheck2 className="w-6 h-6 text-green-400 drop-shadow-[0_0_10px_rgba(74,222,128,0.5)]" />
                </div>
-               <h3 className="text-xl font-bold font-display mb-2 relative z-10">Detailed Audit Logs</h3>
-               <p className="text-white/60 text-sm relative z-10">
+               <h3 className="text-xl font-bold font-display mb-2 relative z-10 text-white">Detailed Audit Logs</h3>
+               <p className="text-white/70 text-sm relative z-10 font-medium">
                   Comprehensive post-exam reports including severity scores, video clips, and behavioral graphs.
                </p>
             </motion.div>
+           </TiltCard>
          </div>
       </section>
 
@@ -292,9 +366,11 @@ export default function LandingPage() {
                Join hundreds of institutions using ProctorAI to maintain academic integrity on a massive scale.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-               <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="w-full sm:w-auto bg-indigo-600 text-white px-8 py-4 rounded-full font-bold hover:bg-indigo-500 transition-all shadow-[0_0_40px_rgba(99,102,241,0.4)] hover:shadow-[0_0_60px_rgba(99,102,241,0.6)]">
-                 Start Your Free Trial
-               </motion.button>
+               <Link to="/signup">
+                 <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="w-full sm:w-auto bg-indigo-600 text-white px-8 py-4 rounded-full font-bold hover:bg-indigo-500 transition-all shadow-[0_0_40px_rgba(99,102,241,0.4)] hover:shadow-[0_0_60px_rgba(99,102,241,0.6)]">
+                   Start Your Free Trial
+                 </motion.button>
+               </Link>
                <motion.button 
                  whileHover={{ scale: 1.05 }} 
                  whileTap={{ scale: 0.95 }} 

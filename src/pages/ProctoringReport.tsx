@@ -1,8 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ShieldAlert, CheckCircle2, AlertTriangle, ArrowLeft, Video, Clock, EyeOff, MonitorSmartphone, UserCheck, Mic, PackageSearch, Eye, Download, Play, Pause, RotateCcw } from 'lucide-react';
+import { ShieldAlert, CheckCircle2, AlertTriangle, ArrowLeft, Video, Clock, EyeOff, MonitorSmartphone, UserCheck, Mic, PackageSearch, Eye, Download, Play, Pause, RotateCcw, BrainCircuit, Sparkles } from 'lucide-react';
 import { motion } from 'motion/react';
-import { getSubmissionDetails } from '../lib/firebase';
+import { toast } from 'sonner';
+import { getSubmissionDetails, updateSubmissionAiGrade, getExamById } from '../lib/firebase';
+import { evaluateSubmission } from '../lib/gemini';
+
 
 export default function ProctoringReport() {
   const { id } = useParams();
@@ -17,6 +20,26 @@ export default function ProctoringReport() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentFrame, setCurrentFrame] = useState(0);
   const playbackIntervalRef = useRef<any>(null);
+  const [isEvaluating, setIsEvaluating] = useState(false);
+  const reportRef = useRef<HTMLDivElement>(null);
+
+  const handleAiEvaluation = async () => {
+    if (!report) return;
+    setIsEvaluating(true);
+    try {
+      const exam = await getExamById(report.exam_id);
+      if (!exam) throw new Error("Exam details not found");
+      
+      const result = await evaluateSubmission(exam.name, exam.questions, report.answers);
+      await updateSubmissionAiGrade(id!, result);
+      setReport({ ...report, ai_grade: result });
+      toast.success("AI Evaluation complete!");
+    } catch (err: any) {
+      toast.error("AI Evaluation failed: " + err.message);
+    } finally {
+      setIsEvaluating(false);
+    }
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -61,6 +84,7 @@ export default function ProctoringReport() {
   };
 
   const handleDownloadPDF = () => {
+    // This triggers the browser's native print dialog which formats the PDF correctly with the @media print styles
     window.print();
   };
 
@@ -102,7 +126,7 @@ export default function ProctoringReport() {
         </button>
       </nav>
 
-      <main className="max-w-6xl mx-auto px-6 py-12">
+      <main ref={reportRef} className="max-w-7xl mx-auto px-6 py-12">
         {/* Header section */}
         <div className="flex flex-col md:flex-row gap-8 items-start justify-between mb-12">
           <div>
@@ -144,9 +168,13 @@ export default function ProctoringReport() {
             </div>
 
             {currentIncident && (
-              <div className="absolute bottom-16 left-4 right-4 bg-red-500/80 backdrop-blur-md px-4 py-2 rounded-lg flex items-center justify-between border border-red-400/50">
+              <div className={`absolute bottom-16 left-4 right-4 ${currentIncident.type.includes('Identity Verified') ? 'bg-green-500/80 border-green-400/50' : 'bg-red-500/80 border-red-400/50'} backdrop-blur-md px-4 py-2 rounded-lg flex items-center justify-between border`}>
                 <div className="flex items-center gap-2">
-                  <ShieldAlert className="w-4 h-4 text-white" />
+                  {currentIncident.type.includes('Identity Verified') ? (
+                    <UserCheck className="w-4 h-4 text-white" />
+                  ) : (
+                    <ShieldAlert className="w-4 h-4 text-white" />
+                  )}
                   <span className="text-xs font-bold text-white uppercase tracking-wider">{currentIncident.type}</span>
                 </div>
                 <span className="text-[10px] text-white/80 font-mono">{currentIncident.time}</span>
@@ -275,7 +303,7 @@ export default function ProctoringReport() {
            <div className={`${activeTab === 'overview' ? 'grid' : 'hidden print:grid'} grid-cols-1 md:grid-cols-3 gap-6`}>
              <div className="bg-[#0A0A0C] border border-white/10 p-8 rounded-3xl shadow-lg">
                <div className="text-white/40 text-sm font-bold uppercase tracking-wider mb-2">Total Flags</div>
-               <div className="text-4xl font-display font-bold">{flags.length}</div>
+               <div className="text-4xl font-display font-bold">{flags.filter((f: any) => !f.type.includes('Identity Verified')).length}</div>
              </div>
              <div className="bg-[#0A0A0C] border border-white/10 p-8 rounded-3xl shadow-lg">
                <div className="text-white/40 text-sm font-bold uppercase tracking-wider mb-2">Critical Violations</div>
@@ -306,8 +334,78 @@ export default function ProctoringReport() {
                  </div>
                </div>
              )}
-           </div>
+            </div>
         )}
+
+        {/* AI GRADING SECTION */}
+        <div className="mt-12 bg-[#0A0A0C] border border-white/10 rounded-3xl p-8 shadow-2xl relative overflow-hidden">
+          <div className="absolute top-0 right-0 p-6 opacity-10">
+            <BrainCircuit className="w-32 h-32 text-indigo-400" />
+          </div>
+          
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8 relative z-10">
+            <div>
+              <h2 className="text-2xl font-display font-bold flex items-center gap-3">
+                <Sparkles className="w-6 h-6 text-indigo-400" />
+                AI Exam Evaluation
+              </h2>
+              <p className="text-white/40 text-sm mt-1">Automated grading and feedback powered by Gemini AI</p>
+            </div>
+            {!report.ai_grade && (
+              <button 
+                onClick={handleAiEvaluation}
+                disabled={isEvaluating}
+                className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-3 transition-all shadow-[0_0_20px_rgba(99,102,241,0.3)] hover:scale-105 active:scale-95"
+              >
+                {isEvaluating ? (
+                  <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <BrainCircuit className="w-5 h-5" />
+                )}
+                {isEvaluating ? 'Evaluating...' : 'Run AI Grading'}
+              </button>
+            )}
+          </div>
+
+          {report.ai_grade ? (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 relative z-10">
+              <div className="bg-[#050505] border border-white/5 p-6 rounded-2xl flex flex-col items-center justify-center text-center">
+                <div className="text-white/40 text-xs font-bold uppercase tracking-widest mb-2">AI Calculated Score</div>
+                <div className="text-5xl font-display font-bold text-indigo-400">{report.ai_grade.score}%</div>
+                <div className="mt-4 px-3 py-1 bg-indigo-500/10 border border-indigo-500/20 rounded-full text-[10px] font-bold text-indigo-300 uppercase tracking-tighter">Automated Result</div>
+              </div>
+              <div className="lg:col-span-2 space-y-6">
+                <div>
+                  <h3 className="text-sm font-bold text-white/70 mb-2 uppercase tracking-wider">Student Feedback</h3>
+                  <div className="bg-white/5 border border-white/5 p-4 rounded-xl text-white/80 leading-relaxed text-sm italic">
+                    "{report.ai_grade.feedback}"
+                  </div>
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white/70 mb-2 uppercase tracking-wider">Instructor Grading Notes</h3>
+                  <div className="bg-[#121214] border border-indigo-500/10 p-4 rounded-xl text-indigo-200/70 text-sm font-mono leading-relaxed">
+                    {report.ai_grade.grading_notes}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 no-print">
+              <button 
+                onClick={handleDownloadPDF}
+                className="bg-white/5 hover:bg-white/10 text-white px-4 py-2 rounded-xl text-sm font-medium border border-white/10 transition-all flex items-center gap-2"
+              >
+                <Download className="w-4 h-4" />
+                Download PDF
+              </button>
+            </div>
+            </div>
+          ) : (
+            <div className="bg-white/5 border border-dashed border-white/10 rounded-2xl p-12 text-center">
+              <p className="text-white/30 text-sm">No AI evaluation has been performed for this submission yet.</p>
+            </div>
+          )}
+        </div>
+
+        {/* TABS ... rest ... */}
 
       </main>
     </div>

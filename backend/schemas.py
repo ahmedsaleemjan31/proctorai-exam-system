@@ -22,6 +22,7 @@ class ExamCreate(BaseModel):
     time: str
     instructor_id: str
     questions: List[Dict[str, Any]]
+    assigned_students: Optional[List[str]] = []
 
 class SubmissionCreate(BaseModel):
     id: str
@@ -33,6 +34,7 @@ class SubmissionCreate(BaseModel):
     incidents: List[Dict[str, Any]]
     trust_score: float
     submitted_at: str
+    ai_grade: Optional[Dict[str, Any]] = None
 
 class SettingsUpdate(BaseModel):
     sensitivity: str
@@ -43,3 +45,9 @@ class SettingsUpdate(BaseModel):
     isObjectEnabled: bool
     isAudioEnabled: bool
     isIdentityEnabled: bool
+
+class EmailReportRequest(BaseModel):
+    to_email: str
+    student_name: str
+    exam_id: str
+    pdf_content: str # base64 string

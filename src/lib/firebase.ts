@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
+import { getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 import { getFirestore, doc, getDoc, setDoc, updateDoc, serverTimestamp, onSnapshot, collection, query, where, getDocs, addDoc, deleteDoc, Timestamp } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { useState, useEffect } from 'react';
@@ -12,7 +12,7 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 
-export type UserRole = 'admin' | 'student' | null;
+export type UserRole = 'admin' | 'student' | 'instructor' | null;
 
 export interface AppUser {
   uid: string;
@@ -35,7 +35,7 @@ export function useAppAuth() {
         // Fetch user from Python backend
         const fetchUser = async () => {
           try {
-            const res = await fetch(`http://localhost:8000/users/${firebaseUser.uid}`);
+            const res = await fetch(`http://127.0.0.1:8000/users/${firebaseUser.uid}`);
             if (res.ok) {
               const data = await res.json();
               setUser({
@@ -88,14 +88,22 @@ export const loginWithGoogle = async () => {
   }
 };
 
+export const signUpWithEmail = async (email: string, pass: string) => {
+  return createUserWithEmailAndPassword(auth, email, pass);
+};
+
+export const loginWithEmail = async (email: string, pass: string) => {
+  return signInWithEmailAndPassword(auth, email, pass);
+};
+
 // Set Role Helper (Called after new account creation)
 export const setUserRole = async (uid: string, email: string, name: string, role: 'admin' | 'student' | 'instructor') => {
   try {
-    const res = await fetch(`http://localhost:8000/users/${uid}`);
+    const res = await fetch(`http://127.0.0.1:8000/users/${uid}`);
     if (res.ok) {
-      await fetch(`http://localhost:8000/users/${uid}/role?role=${role}`, { method: 'PUT' });
+      await fetch(`http://127.0.0.1:8000/users/${uid}/role?role=${role}`, { method: 'PUT' });
     } else {
-      await fetch('http://localhost:8000/users', {
+      await fetch('http://127.0.0.1:8000/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: uid, email, name, role }),
@@ -115,7 +123,7 @@ export const subscribeToUsers = (callback: (users: any[]) => void) => {
   let isSubscribed = true;
   const fetchUsers = async () => {
     try {
-      const res = await fetch('http://localhost:8000/users');
+      const res = await fetch('http://127.0.0.1:8000/users');
       if (res.ok && isSubscribed) {
         const users = await res.json();
         callback(users);
@@ -133,11 +141,12 @@ export const subscribeToUsers = (callback: (users: any[]) => void) => {
 };
 
 // Exam Helpers
-export const subscribeToExams = (callback: (exams: any[]) => void) => {
+export const subscribeToExams = (callback: (exams: any[]) => void, studentId?: string) => {
   let isSubscribed = true;
   const fetchExams = async () => {
     try {
-      const res = await fetch('http://localhost:8000/exams');
+      const url = studentId ? `http://127.0.0.1:8000/exams?student_id=${studentId}` : 'http://127.0.0.1:8000/exams';
+      const res = await fetch(url);
       if (res.ok && isSubscribed) {
         const exams = await res.json();
         callback(exams);
@@ -154,24 +163,24 @@ export const subscribeToExams = (callback: (exams: any[]) => void) => {
   };
 };
 
-export const createExam = async (name: string, date: string, time: string, createdBy: string, questions: any[] = []) => {
+export const createExam = async (name: string, date: string, time: string, createdBy: string, questions: any[] = [], assignedStudents: string[] = []) => {
   const id = "exam_" + Date.now();
-  await fetch('http://localhost:8000/exams', {
+  await fetch('http://127.0.0.1:8000/exams', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      id, name, date, time, instructor_id: createdBy, questions
+      id, name, date, time, instructor_id: createdBy, questions, assigned_students: assignedStudents
     }),
   });
 };
 
 export const deleteExam = async (examId: string) => {
-  await fetch(`http://localhost:8000/exams/${examId}`, { method: 'DELETE' });
+  await fetch(`http://127.0.0.1:8000/exams/${examId}`, { method: 'DELETE' });
 };
 
 export const getExamById = async (examId: string): Promise<any | null> => {
   try {
-    const res = await fetch(`http://localhost:8000/exams/${examId}`);
+    const res = await fetch(`http://127.0.0.1:8000/exams/${examId}`);
     if (res.ok) return await res.json();
   } catch (e) {}
   return null;
@@ -192,7 +201,7 @@ export const submitExam = async (examId: string, studentId: string, studentName:
       submitted_at: new Date().toISOString(),
     };
     
-    await fetch('http://localhost:8000/submissions', {
+    await fetch('http://127.0.0.1:8000/submissions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -208,7 +217,7 @@ export const subscribeToSubmissions = (callback: (submissions: any[]) => void) =
   let isSubscribed = true;
   const fetchSubs = async () => {
     try {
-      const res = await fetch('http://localhost:8000/submissions');
+      const res = await fetch('http://127.0.0.1:8000/submissions');
       if (res.ok && isSubscribed) {
         const subs = await res.json();
         subs.sort((a: any, b: any) => new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime());
@@ -230,7 +239,7 @@ export const subscribeToStudentSubmissions = (studentId: string, callback: (subm
   let isSubscribed = true;
   const fetchSubs = async () => {
     try {
-      const res = await fetch('http://localhost:8000/submissions');
+      const res = await fetch('http://127.0.0.1:8000/submissions');
       if (res.ok && isSubscribed) {
         const subs = await res.json();
         const filtered = subs.filter((s: any) => s.student_id === studentId);
@@ -251,7 +260,7 @@ export const subscribeToStudentSubmissions = (studentId: string, callback: (subm
 
 export const getSubmissionDetails = async (submissionId: string) => {
   try {
-    const res = await fetch(`http://localhost:8000/submissions/${submissionId}`);
+    const res = await fetch(`http://127.0.0.1:8000/submissions/${submissionId}`);
     if (res.ok) return await res.json();
   } catch (e) {}
   return null;
@@ -262,7 +271,7 @@ export const subscribeToSettings = (callback: (settings: any) => void) => {
   let isSubscribed = true;
   const fetchSet = async () => {
     try {
-      const res = await fetch('http://localhost:8000/settings');
+      const res = await fetch('http://127.0.0.1:8000/settings');
       if (res.ok && isSubscribed) {
         const settings = await res.json();
         callback(settings);
@@ -280,9 +289,16 @@ export const subscribeToSettings = (callback: (settings: any) => void) => {
 };
 
 export const updateSettings = async (settings: any, userId: string) => {
-  await fetch(`http://localhost:8000/settings?user_id=${userId}`, {
+  await fetch(`http://127.0.0.1:8000/settings?user_id=${userId}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(settings),
+  });
+};
+export const updateSubmissionAiGrade = async (submissionId: string, aiGrade: any) => {
+  await fetch(`http://127.0.0.1:8000/submissions/${submissionId}/ai_grade`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(aiGrade),
   });
 };

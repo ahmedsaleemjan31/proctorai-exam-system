@@ -17,6 +17,7 @@ class Exam(Base):
     time = Column(String)
     instructor_id = Column(String, ForeignKey("users.id"))
     questions = Column(JSON) # Store list of questions
+    assigned_students = Column(JSON, default=[]) # Store list of student emails/IDs
     submissions = relationship("Submission", back_populates="exam")
 
 class Submission(Base):
@@ -30,6 +31,7 @@ class Submission(Base):
     incidents = Column(JSON)
     trust_score = Column(Float)
     submitted_at = Column(String)
+    ai_grade = Column(JSON, nullable=True) # AI-generated grading result
 
     exam = relationship("Exam", back_populates="submissions")
 

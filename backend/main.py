@@ -6,7 +6,7 @@ from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from . import models, schemas
 from .database import engine, get_db
 from .utils.ai_monitor import AIProctor
@@ -142,8 +142,18 @@ def create_exam(exam: schemas.ExamCreate, db: Session = Depends(get_db)):
     return db_exam
 
 @app.get("/exams")
-def get_exams(db: Session = Depends(get_db)):
-    return db.query(models.Exam).all()
+def get_exams(student_id: Optional[str] = None, instructor_id: Optional[str] = None, db: Session = Depends(get_db)):
+    query = db.query(models.Exam)
+    if student_id:
+        # Check if student email/ID is in the assigned_students JSON list
+        # Since it's a JSON column in SQLite/PostgreSQL, we can fetch all and filter or use JSON functions.
+        # For SQLite simplicity in dev, we fetch all and filter in Python or use a basic string check.
+        all_exams = query.all()
+        # Filter for exams where student_id is in assigned_students list
+        return [e for e in all_exams if not e.assigned_students or student_id in e.assigned_students]
+    if instructor_id:
+        query = query.filter(models.Exam.instructor_id == instructor_id)
+    return query.all()
 
 @app.get("/exams/{exam_id}")
 def get_exam(exam_id: str, db: Session = Depends(get_db)):
@@ -227,6 +237,15 @@ def get_submission(sub_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Submission not found")
     return sub
 
+@app.put("/submissions/{sub_id}/ai_grade")
+def update_ai_grade(sub_id: str, ai_grade: dict, db: Session = Depends(get_db)):
+    sub = db.query(models.Submission).filter(models.Submission.id == sub_id).first()
+    if not sub:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    sub.ai_grade = ai_grade
+    db.commit()
+    return sub
+
 @app.get("/settings")
 def get_settings(db: Session = Depends(get_db)):
     sett = db.query(models.Settings).first()
@@ -236,6 +255,27 @@ def get_settings(db: Session = Depends(get_db)):
         db.commit()
         db.refresh(sett)
     return sett
+
+@app.post("/upload_incident")
+def upload_incident(data: dict):
+    """Standalone endpoint to upload an incident image and get a local URL."""
+    image_b64 = data.get("image")
+    if not image_b64 or not image_b64.startswith("data:image"):
+        raise HTTPException(status_code=400, detail="Invalid image data")
+    
+    try:
+        header, encoded = image_b64.split(",", 1)
+        file_extension = "jpg" if "jpeg" in header or "jpg" in header else "png"
+        file_data = base64.b64decode(encoded)
+        filename = f"incident_{uuid.uuid4()}.{file_extension}"
+        filepath = os.path.join("uploads", filename)
+        
+        with open(filepath, "wb") as f:
+            f.write(file_data)
+            
+        return {"image_url": f"http://localhost:8000/uploads/{filename}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.put("/settings")
 def update_settings(sett_update: schemas.SettingsUpdate, user_id: str, db: Session = Depends(get_db)):

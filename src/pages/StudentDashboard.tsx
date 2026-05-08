@@ -188,9 +188,9 @@ export default function StudentDashboard() {
                     {hasFlags ? <ShieldAlert className="w-4 h-4 text-red-400" /> : <ShieldCheck className="w-4 h-4 text-green-400" />}
                   </div>
                   <div>
-                    <div className="text-sm font-medium">{sub.examId || 'Exam'}</div>
+                    <div className="text-sm font-medium">{sub.exam_id || 'Exam'}</div>
                     <div className="text-xs text-white/40">
-                      {sub.submittedAt ? new Date(sub.submittedAt.toMillis()).toLocaleString() : 'Unknown date'}
+                      {sub.submitted_at ? new Date(sub.submitted_at).toLocaleString() : 'Unknown date'}
                       {flagCount > 0 && ` · ${flagCount} flag${flagCount > 1 ? 's' : ''}`}
                     </div>
                   </div>

@@ -44,9 +44,9 @@ export default function LandingPage() {
                     Log In
                   </motion.button>
                 </Link>
-                <Link to="/login">
+                <Link to="/signup">
                   <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="bg-white text-black px-4 py-2 rounded-full text-sm font-medium hover:bg-white/90 outline-none transition-all flex items-center gap-2 shadow-[0_0_15px_rgba(255,255,255,0.2)] hover:shadow-[0_0_25px_rgba(255,255,255,0.4)] cursor-pointer">
-                    Portal Access <ArrowRight className="w-4 h-4" />
+                    Sign Up <ArrowRight className="w-4 h-4" />
                   </motion.button>
                 </Link>
               </>
@@ -106,7 +106,7 @@ export default function LandingPage() {
           </p>
           
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-             <Link to="/login" className="w-full sm:w-auto">
+             <Link to="/signup" className="w-full sm:w-auto">
                 <Magnetic strength={0.2} className="w-full sm:w-auto">
                   <motion.button 
                     whileHover={{ scale: 1.05 }} 

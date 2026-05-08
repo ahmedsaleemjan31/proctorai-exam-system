@@ -286,22 +286,50 @@ export default function ExamRoom() {
 
   // Fetch exam data + validate time window
   useEffect(() => {
-    if (!id) return;
-    getExamById(id).then(exam => {
-      if (!exam) { toast.error('Exam not found.'); navigate('/student'); return; }
-      setExamData(exam);
-      // Time-gate check
-      const dt = new Date(`${exam.date}T${exam.time}`);
-      const diffMins = (dt.getTime() - Date.now()) / 60_000;
-      if (diffMins > 15) {
-        toast.error('This exam has not started yet.');
-        navigate('/student');
-      } else if (diffMins < -240) {
-        toast.error('This exam session has expired.');
+    if (!id || !user) return;
+    
+    const initExam = async () => {
+      try {
+        // 1. Check if student already submitted (REQ: 1 time only)
+        const subRes = await fetch('http://localhost:8000/submissions');
+        if (subRes.ok) {
+          const subs = await subRes.json();
+          if (subs.some((s: any) => s.exam_id === id && s.student_id === user.uid)) {
+            toast.error('You have already submitted this exam.');
+            navigate('/student');
+            return;
+          }
+        }
+
+        // 2. Load Exam Data
+        const exam = await getExamById(id);
+        if (!exam) { 
+          toast.error('Exam not found.'); 
+          navigate('/student'); 
+          return; 
+        }
+        
+        setExamData(exam);
+        
+        // Time-gate check
+        const dt = new Date(`${exam.date}T${exam.time}`);
+        const diffMins = (dt.getTime() - Date.now()) / 60_000;
+        if (diffMins > 15) {
+          toast.error('This exam has not started yet.');
+          navigate('/student');
+        } else if (diffMins < -240) {
+          toast.error('This exam session has expired.');
+          navigate('/student');
+        }
+      } catch (err) {
+        console.error("Failed to load exam:", err);
+        toast.error('Failed to load exam.'); 
         navigate('/student');
       }
-    }).catch(() => { toast.error('Failed to load exam.'); navigate('/student'); });
-  }, [id]);
+    };
+
+    initExam();
+  }, [id, user]);
 
   // Fallback dummy questions (used only if admin added none)
   const FALLBACK_QUESTIONS = [

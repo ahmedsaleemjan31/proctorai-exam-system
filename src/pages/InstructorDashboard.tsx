@@ -90,16 +90,22 @@ export default function InstructorDashboard() {
   const [submissionSort, setSubmissionSort] = useState<'newest' | 'mostFlags'>('newest');
 
   useEffect(() => {
+    if (!user || user.role !== 'instructor') return;
+
     // Fetch all users to filter students
     fetch('http://localhost:8000/users')
       .then(res => res.json())
       .then(data => {
-        setAllStudents(data.filter((u: any) => u.role === 'student'));
-      });
+        if (Array.isArray(data)) {
+          setAllStudents(data.filter((u: any) => u.role === 'student'));
+        }
+      })
+      .catch(err => console.error("Failed to fetch students:", err));
 
     const unsubExams = subscribeToExams((fetchedExams) => {
       setExams(fetchedExams.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()));
-    });
+    }, undefined, user.uid);
+
     const unsubSettings = subscribeToSettings((settings) => {
       if (settings) {
         setSensitivity(settings.sensitivity ?? 'medium');
@@ -122,7 +128,7 @@ export default function InstructorDashboard() {
       unsubSettings();
       unsubSubmissions();
     };
-  }, []);
+  }, [user]);
 
   if (loading) return <SkeletonLoader />;
   if (!user || user.role !== 'instructor') return <Navigate to="/login" />;
@@ -176,7 +182,13 @@ export default function InstructorDashboard() {
     }
   };
 
-  const getRealFlags = (incidents: any[]) => (incidents || []).filter(i => !i.type.includes('Identity Verified'));
+  const getRealFlags = (incidents: any) => {
+    let list = incidents;
+    if (typeof incidents === 'string') {
+      try { list = JSON.parse(incidents); } catch(e) { list = []; }
+    }
+    return (list || []).filter((i: any) => i && i.type && !i.type.includes('Identity Verified'));
+  };
 
   const filteredSubmissions = submissions
     .filter(s => {
@@ -190,11 +202,14 @@ export default function InstructorDashboard() {
           submissionFilter === 'clean' ? realFlags.length === 0 : true;
       return matchSearch && matchFilter;
     })
-    .sort((a, b) =>
-      submissionSort === 'mostFlags'
-        ? getRealFlags(b.incidents).length - getRealFlags(a.incidents).length
-        : (b.submittedAt?.toMillis() || 0) - (a.submittedAt?.toMillis() || 0)
-    );
+    .sort((a, b) => {
+      if (submissionSort === 'mostFlags') {
+        return getRealFlags(b.incidents).length - getRealFlags(a.incidents).length;
+      }
+      const dateA = a.submitted_at ? new Date(a.submitted_at).getTime() : 0;
+      const dateB = b.submitted_at ? new Date(b.submitted_at).getTime() : 0;
+      return dateB - dateA;
+    });
 
   const handleDeleteExam = async (id: string) => {
     if (confirm("Are you sure you want to delete this exam?")) {
